@@ -1,5 +1,5 @@
 # ENG5220-VibePulse
-# Realtime Heart-Rate–Driven Adaptive Music System
+## Realtime Heart-Rate–Driven Adaptive Music System
 
 University of Glasgow — ENG5220: Real Time Embedded Programming Team Project
 
@@ -38,6 +38,13 @@ A realtime, event-driven embedded system on Raspberry Pi that continuously monit
 
 ## 🧠 Motivation
 Humans’ heart rate changes with physical and emotional states. Adapting music in realtime based on heart-rate inferred mood can enhance focus, relaxation, or performance in daily activities.
+
+## 📌 Key Features
+- 📈 **Realtime heart-rate sampling** with event-triggered peak detection  
+- 🎵 **Adaptive music selection** based on inferred state  
+- 🧾 **Mood and HR logging** with time-stamped entries  
+- ⚙️ **Runs on Raspberry Pi using event-driven C++**
+
 ## Social Media
 
 <p align="center">
@@ -69,12 +76,15 @@ Humans’ heart rate changes with physical and emotional states. Adapting music 
   </a>
 </p>
 
+## Project Management
 
-## 📌 Key Features
-- 📈 **Realtime heart-rate sampling** with event-triggered peak detection  
-- 🎵 **Adaptive music selection** based on inferred state  
-- 🧾 **Mood and HR logging** with time-stamped entries  
-- ⚙️ **Runs on Raspberry Pi using event-driven C++**
+Development is managed using GitHub Issues and Projects.
+
+- Tasks are tracked as GitHub Issues with clear ownership.
+- Progress is visualised using a project board (To do / In progress / Done).
+- Milestones are used to structure development phases.
+- All code changes are linked to issues via commit messages.
+
 
 ## 🛠️ Hardware & Software
 ### Hardware
