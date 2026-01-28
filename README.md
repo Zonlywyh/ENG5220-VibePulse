@@ -49,7 +49,7 @@ Humans’ heart rate changes with physical and emotional states. Adapting music 
 
 <p align="center">
   <!-- Instagram -->
-  <a href="https://www.instagram.com/">
+  <a href="https://www.instagram.com/vibepulse2026">
     <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Instagram_icon.png/128px-Instagram_icon.png"
          width="52" height="52" alt="Instagram">
   </a>
