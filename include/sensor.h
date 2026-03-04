@@ -47,6 +47,33 @@ struct Sample {
     float ir = 0.0f;   // IR channel value / 红外通道值
 };
 
+enum SampleAverage {
+    SAMPLEAVG_1  = 0,
+    SAMPLEAVG_2  = 1,
+    SAMPLEAVG_4  = 2,
+    SAMPLEAVG_8  = 3,
+    SAMPLEAVG_16 = 4,
+    SAMPLEAVG_32 = 5
+};
+
+enum SampleRate {
+    SAMPLERATE_50  = 0,
+    SAMPLERATE_100 = 1,
+    SAMPLERATE_200 = 2,
+    SAMPLERATE_400 = 3,
+    SAMPLERATE_800 = 4,
+    SAMPLERATE_1000= 5,
+    SAMPLERATE_1600= 6,
+    SAMPLERATE_3200= 7
+};
+
+enum LedPulseWidth {
+    PULSEWIDTH_69  = 0,
+    PULSEWIDTH_118 = 1,
+    PULSEWIDTH_215 = 2,
+    PULSEWIDTH_411 = 3
+};
+
 class Max30102Sensor {
 public:
     // Callback type: called with batch of samples / 回调类型：使用样本批次调用
