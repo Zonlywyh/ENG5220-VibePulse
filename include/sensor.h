@@ -121,6 +121,10 @@ private:
     std::deque<Sample> sample_buffer_;
 
     DataCallback data_callback_;            // Stored callback / 存储的回调
+        // Added: Save configuration parameters，新增：保存配置参数
+    SampleAverage sampleAvg_;
+    SampleRate    sampleRate_;
+    LedPulseWidth pulseWidth_;
 
     std::thread reader_thread_;             // Reader thread / 读取线程
 
