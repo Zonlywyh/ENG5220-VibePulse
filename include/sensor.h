@@ -100,6 +100,13 @@ public:
 
     // Set callback for new data / 设置新数据回调
     void setDataCallback(DataCallback cb);
+    
+    bool checkPartID();
+
+    // Modified configuration function (with parameters)修改后的配置函数（带参数）
+    bool configureSensor(SampleAverage avg = SAMPLEAVG_4,
+                         SampleRate rate = SAMPLERATE_100,
+                         LedPulseWidth width = PULSEWIDTH_411);
 
     // Getter for latest samples (thread-safe) / 获取最新样本（线程安全）
     std::vector<Sample> getLatestSamples(size_t maxCount = 100) const;
