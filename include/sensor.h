@@ -80,7 +80,11 @@ public:
     using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
 
     // Constructor with optional interrupt pin / 构造函数，带可选中断引脚
-    Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO);
+    // Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO);
+    Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO,
+               SampleAverage avg = SAMPLEAVG_4,
+               SampleRate rate = SAMPLERATE_100,
+               LedPulseWidth width = PULSEWIDTH_411);
 
     // Destructor for cleanup / 析构函数用于清理
     ~Max30102Sensor();
