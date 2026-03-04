@@ -58,7 +58,7 @@ bool Max30102Sensor::initialize() {
 bool Max30102Sensor::checkPartID() {
     uint8_t id = readRegister(REG_PART_ID);
     if (id != 0x15) {
-        std::cerr << "错误：检测到的芯片不是 MAX30102 (ID=0x" 
+        std::cerr << "error (ID=0x" 
                   << std::hex << (int)id << ")" << std::endl;
         return false;
     }
