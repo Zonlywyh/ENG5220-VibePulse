@@ -2,8 +2,11 @@
 #include <iostream>  // For debug output / 用于调试输出
 
 // Constructor / 构造函数
-Max30102Sensor::Max30102Sensor(int interruptPin)
-    : interrupt_pin_(interruptPin) {}
+Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate rate, LedPulseWidth width)
+    : interrupt_pin_(interruptPin),
+      sampleAvg_(avg),      
+      sampleRate_(rate),
+      pulseWidth_(width) {}
 
 // Destructor: ensure stop / 析构函数：确保停止
 Max30102Sensor::~Max30102Sensor() {
@@ -47,6 +50,15 @@ bool Max30102Sensor::initialize() {
     // Configure sensor / 配置传感器
     if (!configureSensor()) return false;
 
+    return true;
+}
+bool Max30102Sensor::checkPartID() {
+    uint8_t id = readRegister(REG_PART_ID);
+    if (id != 0x15) {
+        std::cerr << "错误：检测到的芯片不是 MAX30102 (ID=0x" 
+                  << std::hex << (int)id << ")" << std::endl;
+        return false;
+    }
     return true;
 }
 
