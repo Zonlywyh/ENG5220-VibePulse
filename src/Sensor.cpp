@@ -30,7 +30,10 @@ bool Max30102Sensor::initialize() {
         std::cerr << "Could not set I2C address." << std::endl;
         return false;
     }
-
+        // 新增：检查芯片ID
+    if (!checkPartID()) {
+        return false;
+    }
     // Open GPIO chip / 打开GPIO芯片
     chip_ = gpiod_chip_open_by_number(DEFAULT_DRDY_CHIP);
     if (!chip_) {
@@ -62,29 +65,32 @@ bool Max30102Sensor::checkPartID() {
     return true;
 }
 
-// Configure registers (from repo) / 配置寄存器（来自仓库）
-bool Max30102Sensor::configureSensor() {
-    // Reset / 复位
+bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPulseWidth width) {
+    
+    sampleAvg_ = avg;
+    sampleRate_ = rate;
+    pulseWidth_ = width;
+
+    // Reset
     writeRegister(REG_MODE_CONFIG, 0x40);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));  // Reset delay (init only) / 复位延迟（仅初始化）
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    // Mode: SpO2 + HR / 模式：SpO2 + HR
-    writeRegister(REG_MODE_CONFIG, 0x03);
+    // FIFO  + Sample Average
+    uint8_t fifoConfig = 0x40 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
+    writeRegister(REG_FIFO_CONFIG, fifoConfig);
 
-    // FIFO: avg 4 samples, rollover / FIFO：平均4样本，滚动
-    writeRegister(REG_FIFO_CONFIG, 0x40 | 0x0F);
+    // SpO2 配置（采样率 + 脉宽）SpO2 configuration (sampling rate + pulse width)
+    uint8_t spo2Config = (static_cast<uint8_t>(rate) << 2) | static_cast<uint8_t>(width);
+    writeRegister(REG_SPO2_CONFIG, spo2Config);
 
-    // SpO2 config: 100Hz, 411us pulse / SpO2配置：100Hz，411us脉冲
-    writeRegister(REG_SPO2_CONFIG, 0x27);
+    // LED 电流，LED current
+    writeRegister(REG_LED1_PA, 0x1F);
+    writeRegister(REG_LED2_PA, 0x1F);
 
-    // LED currents / LED电流
-    writeRegister(REG_LED1_PA, 0x1F);  // Red ~7.6mA / 红色~7.6mA
-    writeRegister(REG_LED2_PA, 0x1F);  // IR ~7.6mA / 红外~7.6mA
-
-    // Enable A_FULL interrupt / 启用A_FULL中断
+    // 启用中断，Enable interrupt
     writeRegister(REG_INTR_ENABLE_1, 0xC0);
 
-    // Clear FIFO pointers / 清FIFO指针
+    // 清 FIFO 指针，Clear FIFO pointer
     writeRegister(REG_FIFO_WR_PTR, 0x00);
     writeRegister(REG_OVF_COUNTER, 0x00);
     writeRegister(REG_FIFO_RD_PTR, 0x00);
