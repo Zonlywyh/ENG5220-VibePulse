@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>  // For I2C ioctl / 用于I2C ioctl
 #include <fcntl.h>      // For open / 用于open
 #include <unistd.h>     // For read/write/close / 用于read/write/close
+#include <linux/i2c-dev.h> // For debug output / 用于调试输出
 
 // Default settings / 默认设置
 constexpr int DEFAULT_I2C_BUS = 1;              // Default I2C bus / 默认I2C总线
@@ -129,7 +130,7 @@ private:
     std::thread reader_thread_;             // Reader thread / 读取线程
 
     struct gpiod_chip *chip_ = nullptr;     // GPIO chip / GPIO芯片
-    struct gpiod_line *line_irq_ = nullptr; // IRQ line / IRQ线
+    struct gpiod_line_request *line_request_ = nullptr;
 
     // Worker function for thread / 线程的工作函数
     void dataWorker();
@@ -137,8 +138,6 @@ private:
     // Read FIFO data / 读取FIFO数据
     void readFifo();
 
-    // Configure sensor registers / 配置传感器寄存器
-    bool configureSensor();
 
     // Write to register / 写入寄存器
     void writeRegister(uint8_t reg, uint8_t value);

@@ -1,210 +1,291 @@
-#include "Max30102Sensor.h"
-#include <iostream>  // For debug output / 用于调试输出
+#include "../include/Sensor.h"
+#include <iostream>
+#include <algorithm>
+#include <cstdio>
 
-// Constructor / 构造函数
 Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate rate, LedPulseWidth width)
     : interrupt_pin_(interruptPin),
-      sampleAvg_(avg),      
+      sampleAvg_(avg),
       sampleRate_(rate),
-      pulseWidth_(width) {}
-
-// Destructor: ensure stop / 析构函数：确保停止
-Max30102Sensor::~Max30102Sensor() {
-    stop();
-    if (i2c_fd_ >= 0) close(i2c_fd_);
-    if (line_irq_) gpiod_line_release(line_irq_);
-    if (chip_) gpiod_chip_close(chip_);
+      pulseWidth_(width) {
 }
 
-// Initialize: open I2C and GPIO / 初始化：打开I2C和GPIO
+Max30102Sensor::~Max30102Sensor() {
+    stop();
+
+    if (line_request_) {
+        gpiod_line_request_release(line_request_);
+        line_request_ = nullptr;
+    }
+
+    if (chip_) {
+        gpiod_chip_close(chip_);
+        chip_ = nullptr;
+    }
+
+    if (i2c_fd_ >= 0) {
+        close(i2c_fd_);
+        i2c_fd_ = -1;
+    }
+}
+
 bool Max30102Sensor::initialize() {
-    // Open I2C / 打开I2C
-    char filename[20];
-    snprintf(filename, sizeof(filename), "/dev/i2c-%d", DEFAULT_I2C_BUS);
+    char filename[32];
+    std::snprintf(filename, sizeof(filename), "/dev/i2c-%d", DEFAULT_I2C_BUS);
+
     i2c_fd_ = open(filename, O_RDWR);
     if (i2c_fd_ < 0) {
-        std::cerr << "Could not open I2C." << std::endl;
+        std::cerr << "Could not open I2C bus." << std::endl;
         return false;
     }
+
     if (ioctl(i2c_fd_, I2C_SLAVE, DEFAULT_MAX30102_ADDRESS) < 0) {
         std::cerr << "Could not set I2C address." << std::endl;
         return false;
     }
-        // 新增：检查芯片ID
+
     if (!checkPartID()) {
-        return false;
-    }
-    // Open GPIO chip / 打开GPIO芯片
-    chip_ = gpiod_chip_open_by_number(DEFAULT_DRDY_CHIP);
-    if (!chip_) {
-        std::cerr << "Could not open GPIO chip." << std::endl;
-        return false;
-    }
-    line_irq_ = gpiod_chip_get_line(chip_, interrupt_pin_);
-    if (!line_irq_) {
-        std::cerr << "Could not get GPIO line." << std::endl;
-        return false;
-    }
-    if (gpiod_line_request_falling_edge_events(line_irq_, "max30102_drdy") < 0) {
-        std::cerr << "Could not request falling edge events." << std::endl;
+        std::cerr << "MAX30102 part ID check failed." << std::endl;
         return false;
     }
 
-    // Configure sensor / 配置传感器
-    if (!configureSensor()) return false;
+    chip_ = gpiod_chip_open("/dev/gpiochip0");
+    if (!chip_) {
+        std::cerr << "Could not open /dev/gpiochip0." << std::endl;
+        return false;
+    }
+
+    struct gpiod_line_settings* line_settings = gpiod_line_settings_new();
+    struct gpiod_line_config* line_config = gpiod_line_config_new();
+    struct gpiod_request_config* request_config = gpiod_request_config_new();
+
+    if (!line_settings || !line_config || !request_config) {
+        std::cerr << "Could not allocate libgpiod config objects." << std::endl;
+        if (request_config) gpiod_request_config_free(request_config);
+        if (line_config) gpiod_line_config_free(line_config);
+        if (line_settings) gpiod_line_settings_free(line_settings);
+        return false;
+    }
+
+    gpiod_line_settings_set_direction(line_settings, GPIOD_LINE_DIRECTION_INPUT);
+    gpiod_line_settings_set_edge_detection(line_settings, GPIOD_LINE_EDGE_FALLING);
+
+    unsigned int offsets[] = { static_cast<unsigned int>(interrupt_pin_) };
+    if (gpiod_line_config_add_line_settings(line_config, offsets, 1, line_settings) < 0) {
+        std::cerr << "Could not add GPIO line settings." << std::endl;
+        gpiod_request_config_free(request_config);
+        gpiod_line_config_free(line_config);
+        gpiod_line_settings_free(line_settings);
+        return false;
+    }
+
+    gpiod_request_config_set_consumer(request_config, "max30102_drdy");
+
+    line_request_ = gpiod_chip_request_lines(chip_, request_config, line_config);
+
+    gpiod_request_config_free(request_config);
+    gpiod_line_config_free(line_config);
+    gpiod_line_settings_free(line_settings);
+
+    if (!line_request_) {
+        std::cerr << "Could not request GPIO line for interrupt." << std::endl;
+        return false;
+    }
+
+    if (!configureSensor()) {
+        std::cerr << "Sensor configuration failed." << std::endl;
+        return false;
+    }
 
     return true;
 }
+
 bool Max30102Sensor::checkPartID() {
     uint8_t id = readRegister(REG_PART_ID);
     if (id != 0x15) {
-        std::cerr << "error (ID=0x" 
-                  << std::hex << (int)id << ")" << std::endl;
+        std::cerr << "Unexpected MAX30102 part ID: 0x"
+                  << std::hex << static_cast<int>(id) << std::dec << std::endl;
         return false;
     }
     return true;
 }
 
 bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPulseWidth width) {
-    
     sampleAvg_ = avg;
     sampleRate_ = rate;
     pulseWidth_ = width;
 
-    // Reset
     writeRegister(REG_MODE_CONFIG, 0x40);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-    // FIFO  + Sample Average
-    uint8_t fifoConfig = 0x40 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
+    uint8_t fifoConfig = 0x10 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
     writeRegister(REG_FIFO_CONFIG, fifoConfig);
 
-    // SpO2 配置（采样率 + 脉宽）SpO2 configuration (sampling rate + pulse width)
     uint8_t spo2Config = (static_cast<uint8_t>(rate) << 2) | static_cast<uint8_t>(width);
     writeRegister(REG_SPO2_CONFIG, spo2Config);
 
-    // LED 电流，LED current
+    writeRegister(REG_MODE_CONFIG, 0x03);
+
     writeRegister(REG_LED1_PA, 0x1F);
     writeRegister(REG_LED2_PA, 0x1F);
 
-    // 启用中断，Enable interrupt
     writeRegister(REG_INTR_ENABLE_1, 0xC0);
+    writeRegister(REG_INTR_ENABLE_2, 0x00);
 
-    // 清 FIFO 指针，Clear FIFO pointer
     writeRegister(REG_FIFO_WR_PTR, 0x00);
     writeRegister(REG_OVF_COUNTER, 0x00);
     writeRegister(REG_FIFO_RD_PTR, 0x00);
 
+    readRegister(REG_INTR_STATUS_1);
+    readRegister(REG_INTR_STATUS_2);
+
     return true;
 }
 
-// Start: launch thread / 开始：启动线程
 void Max30102Sensor::start() {
     if (running_) return;
     running_ = true;
     reader_thread_ = std::thread(&Max30102Sensor::dataWorker, this);
 }
 
-// Stop: join thread / 停止：加入线程
 void Max30102Sensor::stop() {
     running_ = false;
-    if (reader_thread_.joinable()) reader_thread_.join();
+    if (reader_thread_.joinable()) {
+        reader_thread_.join();
+    }
 }
 
-// Set callback / 设置回调
 void Max30102Sensor::setDataCallback(DataCallback cb) {
     std::lock_guard<std::mutex> lock(mutex_);
     data_callback_ = cb;
 }
 
-// Get latest samples / 获取最新样本
 std::vector<Sample> Max30102Sensor::getLatestSamples(size_t maxCount) const {
     std::lock_guard<std::mutex> lock(mutex_);
+
     size_t count = std::min(maxCount, sample_buffer_.size());
-    std::vector<Sample> samples(sample_buffer_.rbegin(), sample_buffer_.rbegin() + count);
+    std::vector<Sample> samples;
+    samples.reserve(count);
+
+    for (size_t i = 0; i < count; ++i) {
+        samples.push_back(sample_buffer_[sample_buffer_.size() - count + i]);
+    }
+
     return samples;
 }
 
-// Data worker thread: block on event / 数据工作线程：阻塞等待事件
 void Max30102Sensor::dataWorker() {
-    struct timespec timeout = {1, 0};  // 1s timeout / 1秒超时
-    while (running_) {
-        int ret = gpiod_line_event_wait(line_irq_, &timeout);
-        if (ret > 0) {
-            struct gpiod_line_event event;
-            gpiod_line_event_read(line_irq_, &event);  // Read event / 读取事件
-            readFifo();  // Process data / 处理数据
-        } else if (ret < 0) {
-            std::cerr << "Event wait error." << std::endl;
-        }
-    }
-}
-
-// Read FIFO (burst read multiple samples) / 读取FIFO（批量读取多个样本）
-void Max30102Sensor::readFifo() {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    uint8_t wr_ptr = readRegister(REG_FIFO_WR_PTR);
-    uint8_t rd_ptr = readRegister(REG_FIFO_RD_PTR);
-    uint8_t ovf = readRegister(REG_OVF_COUNTER);
-
-    if (ovf > 0) {
-        std::cerr << "FIFO overflow!" << std::endl;
-        writeRegister(REG_FIFO_WR_PTR, 0x00);
-        writeRegister(REG_OVF_COUNTER, 0x00);
-        writeRegister(REG_FIFO_RD_PTR, 0x00);
+    std::cout << "waiting GPIO event..." << std::endl; //tset
+    struct gpiod_edge_event_buffer* event_buffer = gpiod_edge_event_buffer_new(1);
+    if (!event_buffer) {
+        std::cerr << "Could not create GPIO event buffer." << std::endl;
         return;
     }
 
-    int samples_to_read = (wr_ptr - rd_ptr + FIFO_DEPTH) % FIFO_DEPTH;
-    if (samples_to_read == 0) return;
+    while (running_) {
+        int ret = gpiod_line_request_wait_edge_events(line_request_, 1000000000LL);
+        std::cout << "waiting GPIO event..." << std::endl; //tset
+        if (ret == 1) {
+            int num_events = gpiod_line_request_read_edge_events(line_request_, event_buffer, 1);
+            if (num_events < 0) {
+                std::cerr << "Failed to read GPIO edge event." << std::endl;
+                continue;
+            }
 
-    std::vector<Sample> new_samples;
-    new_samples.reserve(samples_to_read);
-
-    for (int i = 0; i < samples_to_read; ++i) {
-        uint8_t buf[6];
-        writeRegister(REG_FIFO_DATA, 0x00);  // Set pointer / 设置指针
-        read(i2c_fd_, buf, 6);  // Burst read 6 bytes / 批量读取6字节
-
-        uint32_t red_raw = (buf[0] << 16) | (buf[1] << 8) | buf[2];
-        uint32_t ir_raw = (buf[3] << 16) | (buf[4] << 8) | buf[5];
-        red_raw &= 0x3FFFF;  // 18-bit / 18位
-        ir_raw &= 0x3FFFF;
-
-        Sample s;
-        s.red = static_cast<float>(red_raw) / (1 << 18);  // Normalize [0,1] / 归一化[0,1]
-        s.ir = static_cast<float>(ir_raw) / (1 << 18);
-
-        sample_buffer_.push_back(s);
-        new_samples.push_back(s);
-
-        if (sample_buffer_.size() > 200) sample_buffer_.pop_front();  // Limit size / 限制大小
+            if (num_events > 0) {
+                readFifo();
+            }
+        } else if (ret == 0) {
+            continue;
+        } else {
+            std::cerr << "GPIO edge wait failed." << std::endl;
+        }
     }
 
-    // Update read pointer / 更新读取指针
-    writeRegister(REG_FIFO_RD_PTR, (rd_ptr + samples_to_read) % FIFO_DEPTH);
+    gpiod_edge_event_buffer_free(event_buffer);
+}
 
-    // Clear interrupts / 清中断
-    readRegister(REG_INTR_STATUS_1);
-    readRegister(REG_INTR_STATUS_2);
+void Max30102Sensor::readFifo() {
+    std::vector<Sample> new_samples;
+    DataCallback cb;
 
-    // Invoke callback if set / 如果设置，调用回调
-    if (data_callback_ && !new_samples.empty()) {
-        data_callback_(new_samples);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::cout << "readFifo called" << std::endl; //test
+
+        uint8_t wr_ptr = readRegister(REG_FIFO_WR_PTR);
+        uint8_t rd_ptr = readRegister(REG_FIFO_RD_PTR);
+        uint8_t ovf    = readRegister(REG_OVF_COUNTER);
+
+        int samples_to_read = (wr_ptr - rd_ptr + FIFO_DEPTH) % FIFO_DEPTH;//test
+        std::cout << "wr_ptr=" << (int)wr_ptr//test
+          << " rd_ptr=" << (int)rd_ptr//test
+          << " ovf=" << (int)ovf//test
+          << " samples_to_read=" << samples_to_read << std::endl;//test
+        if (ovf > 0) {
+            std::cerr << "FIFO overflow!" << std::endl;
+            writeRegister(REG_FIFO_WR_PTR, 0x00);
+            writeRegister(REG_OVF_COUNTER, 0x00);
+            writeRegister(REG_FIFO_RD_PTR, 0x00);
+            return;
+        }
+
+        // int samples_to_read = (wr_ptr + FIFO_DEPTH - rd_ptr) % FIFO_DEPTH;
+        if (samples_to_read == 0) return;
+
+        new_samples.reserve(samples_to_read);
+
+        for (int i = 0; i < samples_to_read; ++i) {
+            uint8_t reg = REG_FIFO_DATA;
+            uint8_t buf[6] = {0};
+
+            write(i2c_fd_, &reg, 1);
+            read(i2c_fd_, buf, 6);
+
+            uint32_t red_raw = (static_cast<uint32_t>(buf[0]) << 16) |
+                               (static_cast<uint32_t>(buf[1]) << 8)  |
+                               static_cast<uint32_t>(buf[2]);
+
+            uint32_t ir_raw  = (static_cast<uint32_t>(buf[3]) << 16) |
+                               (static_cast<uint32_t>(buf[4]) << 8)  |
+                               static_cast<uint32_t>(buf[5]);
+
+            red_raw &= 0x3FFFF;
+            ir_raw  &= 0x3FFFF;
+
+            Sample s;
+            s.red = static_cast<float>(red_raw) / static_cast<float>(1 << 18);
+            s.ir  = static_cast<float>(ir_raw)  / static_cast<float>(1 << 18);
+
+            sample_buffer_.push_back(s);
+            new_samples.push_back(s);
+
+            if (sample_buffer_.size() > 200) {
+                sample_buffer_.pop_front();
+            }
+        }
+
+        writeRegister(REG_FIFO_RD_PTR, (rd_ptr + samples_to_read) % FIFO_DEPTH);
+
+        readRegister(REG_INTR_STATUS_1);
+        readRegister(REG_INTR_STATUS_2);
+
+        cb = data_callback_;
+    }
+
+    if (cb && !new_samples.empty()) {
+        cb(new_samples);
     }
 }
 
-// Write register / 写入寄存器
 void Max30102Sensor::writeRegister(uint8_t reg, uint8_t value) {
-    uint8_t buf[2] = {reg, value};
+    uint8_t buf[2] = { reg, value };
     write(i2c_fd_, buf, 2);
 }
 
-// Read register / 读取寄存器
 uint8_t Max30102Sensor::readRegister(uint8_t reg) {
     write(i2c_fd_, &reg, 1);
-    uint8_t value;
+    uint8_t value = 0;
     read(i2c_fd_, &value, 1);
     return value;
 }
