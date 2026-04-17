@@ -23,7 +23,18 @@ public:
     double getLatestRawIr() const;
 
 private:
-    void processOne(float ir);
+    enum class CallbackEventType {
+        FingerState,
+        Bpm
+    };
+
+    struct CallbackEvent {
+        CallbackEventType type;
+        bool finger_state = false;
+        double bpm = 0.0;
+    };
+
+    void processOne(float ir, std::vector<CallbackEvent>& pending_events);
     void resetState(float ir);
 
 private:

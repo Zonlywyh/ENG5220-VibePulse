@@ -33,9 +33,31 @@ HeartRateCalculator::HeartRateCalculator(double sampleRateHz)
 }
 
 void HeartRateCalculator::processSamples(const std::vector<Sample>& samples) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (const auto& s : samples) {
-        processOne(s.ir);
+    std::vector<CallbackEvent> pending_events;
+    std::function<void(double)> bpm_callback;
+    std::function<void(bool)> finger_state_callback;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        pending_events.reserve(samples.size());
+        for (const auto& s : samples) {
+            processOne(s.ir, pending_events);
+        }
+        bpm_callback = bpm_callback_;
+        finger_state_callback = finger_state_callback_;
+    }
+
+    for (const auto& event : pending_events) {
+        if (event.type == CallbackEventType::FingerState) {
+            if (finger_state_callback) {
+                finger_state_callback(event.finger_state);
+            }
+            continue;
+        }
+
+        if (bpm_callback) {
+            bpm_callback(event.bpm);
+        }
     }
 }
 
@@ -74,7 +96,7 @@ double HeartRateCalculator::getLatestRawIr() const {
     return latest_raw_ir_;
 }
 
-void HeartRateCalculator::processOne(float ir) {
+void HeartRateCalculator::processOne(float ir, std::vector<CallbackEvent>& pending_events) {
     ++sample_index_;
     has_samples_ = true;
     latest_raw_ir_ = ir;
@@ -90,9 +112,7 @@ void HeartRateCalculator::processOne(float ir) {
 
     if (!finger_detected_ && finger_present_count_ >= required_present_samples_) {
         finger_detected_ = true;
-        if (finger_state_callback_) {
-            finger_state_callback_(true);
-        }
+        pending_events.push_back({CallbackEventType::FingerState, true, 0.0});
         baseline_ = ir;
         smooth_ = 0.0;
         history_.clear();
@@ -101,9 +121,7 @@ void HeartRateCalculator::processOne(float ir) {
         last_peak_time_sec_ = -1.0;
     } else if (finger_detected_ && finger_absent_count_ >= required_absent_samples_) {
         finger_detected_ = false;
-        if (finger_state_callback_) {
-            finger_state_callback_(false);
-        }
+        pending_events.push_back({CallbackEventType::FingerState, false, 0.0});
     }
 
     if (!finger_detected_) {
@@ -161,9 +179,7 @@ void HeartRateCalculator::processOne(float ir) {
             double sum = std::accumulate(bpm_window_.begin(), bpm_window_.end(), 0.0);
             latest_bpm_ = sum / static_cast<double>(bpm_window_.size());
             last_peak_time_sec_ = now_sec;
-            if (bpm_callback_) {
-                bpm_callback_(*latest_bpm_);
-            }
+            pending_events.push_back({CallbackEventType::Bpm, false, *latest_bpm_});
         } else if (interval > max_beat_interval_sec_) {
             last_peak_time_sec_ = now_sec;
         }
