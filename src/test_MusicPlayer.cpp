@@ -1,9 +1,6 @@
 // ============================================================
-//  test_MusicPlayer.cpp  —  VibePulse ENG5220
-//  TDD unit tests (Google Test).  Zero hardware dependency.
-//  Build:  g++ -std=c++17 -pthread MusicPlayer.cpp
-//              test_MusicPlayer.cpp -lgtest -lgtest_main -o tests
-//  Run:    ./tests
+//  test_MusicPlayer.cpp  —  VibePulse ENG5220  (6-zone)
+//  Google Test unit tests. Zero hardware dependency.
 // ============================================================
 
 #include "MusicPlayer.h"
@@ -13,40 +10,36 @@
 #include <vector>
 
 // ─────────────────────────────────────────────────────────────
-//  Mock Backend — records every call, no SDL2 needed
+//  Mock Backend
 // ─────────────────────────────────────────────────────────────
 struct MockBackend : public IAudioBackend {
-    // Call log entry
     struct Call { std::string op; int a = 0; int b = 0; };
-
     std::vector<Call> log;
-    bool              ready     = true;
-    int               nextId    = 0;
-    int               loadFails = 0;   // force failures on first N loads
+    bool ready     = true;
+    int  nextId    = 0;
+    int  loadFails = 0;
 
-    int loadTrack(const std::string& path) override {
+    int  loadTrack(const std::string&) override {
         if (loadFails-- > 0) return -1;
         int id = nextId++;
-        log.push_back({"load", id, 0});
+        log.push_back({"load", id});
         return id;
     }
-    void freeTrack(int id) override { log.push_back({"free", id}); }
-    void play(int id, int loops) override { log.push_back({"play", id, loops}); }
-    void setVolume(int id, int vol) override { log.push_back({"vol", id, vol}); }
-    void halt(int id) override { log.push_back({"halt", id}); }
-    bool isReady() const override { return ready; }
+    void freeTrack(int id)          override { log.push_back({"free", id}); }
+    void play(int id, int loops)    override { log.push_back({"play", id, loops}); }
+    void setVolume(int id, int vol) override { log.push_back({"vol",  id, vol}); }
+    void halt(int id)               override { log.push_back({"halt", id}); }
+    bool isReady() const            override { return ready; }
 
-    bool hasCall(const std::string& op) const {
-        for (auto& c : log) if (c.op == op) return true;
-        return false;
-    }
     int countCalls(const std::string& op) const {
-        int n = 0; for (auto& c : log) if (c.op == op) ++n; return n;
+        int n = 0;
+        for (auto& c : log) if (c.op == op) ++n;
+        return n;
     }
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Fixture
+//  Fixture — 2 tracks per zone × 6 zones = 12 tracks
 // ─────────────────────────────────────────────────────────────
 class MusicPlayerTest : public ::testing::Test {
 protected:
@@ -56,144 +49,178 @@ protected:
     void SetUp() override {
         mock   = std::make_shared<MockBackend>();
         player = std::make_unique<MusicPlayer>(mock);
-        player->loadTracks("calm.wav", "active.wav");
+        player->loadZone(MusicZone::ZONE_1, {"z1a.wav", "z1b.wav"});
+        player->loadZone(MusicZone::ZONE_2, {"z2a.wav", "z2b.wav"});
+        player->loadZone(MusicZone::ZONE_3, {"z3a.wav", "z3b.wav"});
+        player->loadZone(MusicZone::ZONE_4, {"z4a.wav", "z4b.wav"});
+        player->loadZone(MusicZone::ZONE_5, {"z5a.wav", "z5b.wav"});
+        player->loadZone(MusicZone::ZONE_6, {"z6a.wav", "z6b.wav"});
     }
 
-    // Block until crossfade finishes or timeout
     void waitForCrossfade(int timeoutMs = 3000) {
-        const auto deadline =
-            std::chrono::steady_clock::now() +
-            std::chrono::milliseconds(timeoutMs);
+        auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeoutMs);
         while (player->isCrossfading() &&
-               std::chrono::steady_clock::now() < deadline) {
+               std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
     }
 };
 
 // ─────────────────────────────────────────────────────────────
-//  Test Cases
+//  T-01  Null backend must throw
 // ─────────────────────────────────────────────────────────────
-
-// T-01  Null backend must throw
-TEST(MusicPlayerConstruction, ThrowsOnNullBackend) {
+TEST(Construction, ThrowsOnNullBackend) {
     EXPECT_THROW(MusicPlayer(nullptr), std::invalid_argument);
 }
 
-// T-02  loadTracks calls backend correctly
-TEST_F(MusicPlayerTest, LoadTracksCallsBackend) {
-    EXPECT_EQ(mock->countCalls("load"), 2);   // calm + active
-    EXPECT_EQ(mock->countCalls("play"), 2);
-    EXPECT_TRUE(mock->hasCall("vol"));
+// ─────────────────────────────────────────────────────────────
+//  T-02  loadZone loads all tracks (12 total)
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, LoadZoneLoadsAllTracks) {
+    EXPECT_EQ(mock->countCalls("load"), 12);
 }
 
-// T-03  loadTracks returns false when backend fails
+// ─────────────────────────────────────────────────────────────
+//  T-03  loadZone returns false on backend failure
+// ─────────────────────────────────────────────────────────────
 TEST(MusicPlayerLoad, ReturnsFalseOnBackendFailure) {
     auto m = std::make_shared<MockBackend>();
-    m->loadFails = 1;  // first load returns -1
+    m->loadFails = 1;
     MusicPlayer p(m);
-    EXPECT_FALSE(p.loadTracks("a.wav", "b.wav"));
+    EXPECT_FALSE(p.loadZone(MusicZone::ZONE_1, {"a.wav", "b.wav"}));
 }
 
-// T-04  Initial mode is CALM
-TEST_F(MusicPlayerTest, InitialModeIsCalm) {
-    EXPECT_EQ(player->currentMode(), MusicMode::CALM);
+// ─────────────────────────────────────────────────────────────
+//  T-04  Initial zone is ZONE_1
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, InitialZoneIsZone1) {
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
 }
 
-// T-05  BPM below threshold keeps CALM mode
-TEST_F(MusicPlayerTest, LowBPMKeepsCalmMode) {
-    player->updateBPM(70);
-    EXPECT_EQ(player->currentMode(), MusicMode::CALM);
+// ─────────────────────────────────────────────────────────────
+//  T-05  BPM boundary mapping — all 6 zones
+// ─────────────────────────────────────────────────────────────
+TEST(BpmMapping, AllZoneBoundaries) {
+    EXPECT_EQ(bpmToZone(60),  MusicZone::ZONE_1);
+    EXPECT_EQ(bpmToZone(79),  MusicZone::ZONE_1);
+    EXPECT_EQ(bpmToZone(80),  MusicZone::ZONE_2);
+    EXPECT_EQ(bpmToZone(99),  MusicZone::ZONE_2);
+    EXPECT_EQ(bpmToZone(100), MusicZone::ZONE_3);
+    EXPECT_EQ(bpmToZone(119), MusicZone::ZONE_3);
+    EXPECT_EQ(bpmToZone(120), MusicZone::ZONE_4);
+    EXPECT_EQ(bpmToZone(139), MusicZone::ZONE_4);
+    EXPECT_EQ(bpmToZone(140), MusicZone::ZONE_5);
+    EXPECT_EQ(bpmToZone(159), MusicZone::ZONE_5);
+    EXPECT_EQ(bpmToZone(160), MusicZone::ZONE_6);
+    EXPECT_EQ(bpmToZone(180), MusicZone::ZONE_6);
 }
 
-// T-06  BPM above threshold triggers ACTIVE transition
-TEST_F(MusicPlayerTest, HighBPMTriggersActiveMode) {
-    player->updateBPM(110);
-    waitForCrossfade();
-    EXPECT_EQ(player->currentMode(), MusicMode::ACTIVE);
-}
-
-// T-07  BPM in hysteresis band (81-99) does NOT change mode
-TEST_F(MusicPlayerTest, HysteresisBandDoesNotToggle) {
-    player->updateBPM(90);
+// ─────────────────────────────────────────────────────────────
+//  T-06  BPM 65 stays in Zone 1
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, BPM65StaysInZone1) {
+    player->updateBPM(65);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(player->currentMode(), MusicMode::CALM);
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
     EXPECT_FALSE(player->isCrossfading());
 }
 
-// T-08  After going ACTIVE, low BPM returns to CALM
-TEST_F(MusicPlayerTest, LowBPMAfterActiveSwitchesToCalm) {
-    player->updateBPM(110);
+// ─────────────────────────────────────────────────────────────
+//  T-07  BPM 85 → Zone 2
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, BPM85TransitionsToZone2) {
+    player->updateBPM(85);
     waitForCrossfade();
-    ASSERT_EQ(player->currentMode(), MusicMode::ACTIVE);
-
-    player->updateBPM(65);
-    waitForCrossfade();
-    EXPECT_EQ(player->currentMode(), MusicMode::CALM);
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_2);
 }
 
-// T-09  Volumes reach correct end-state after ACTIVE transition
-TEST_F(MusicPlayerTest, VolumesCorrectAfterCrossfadeToActive) {
-    player->updateBPM(110);
+// ─────────────────────────────────────────────────────────────
+//  T-08  BPM 150 → Zone 5
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, BPM150TransitionsToZone5) {
+    player->updateBPM(150);
     waitForCrossfade();
-    EXPECT_EQ(player->debugVolumeActive(), 128);
-    EXPECT_EQ(player->debugVolumeCalm(),     0);
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_5);
 }
 
-// T-10  Volumes reach correct end-state after CALM transition
-TEST_F(MusicPlayerTest, VolumesCorrectAfterCrossfadeToCalm) {
-    player->updateBPM(110);
+// ─────────────────────────────────────────────────────────────
+//  T-09  BPM 170 → Zone 6
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, BPM170TransitionsToZone6) {
+    player->updateBPM(170);
     waitForCrossfade();
-    player->updateBPM(65);
-    waitForCrossfade();
-    EXPECT_EQ(player->debugVolumeCalm(),   128);
-    EXPECT_EQ(player->debugVolumeActive(),   0);
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_6);
 }
 
-// T-11  isCrossfading() is true during transition
-TEST_F(MusicPlayerTest, IsCrossfadingDuringTransition) {
-    // We can only sample — start transition and check *before* it finishes
-    player->crossfade(MusicMode::ACTIVE);
-    // Immediately after launch, flag should be true
-    // (small race window; we assert final state is clean)
+// ─────────────────────────────────────────────────────────────
+//  T-10  BPM drop: Zone 6 → Zone 1
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, BPMDropFromZone6ToZone1) {
+    player->updateBPM(170); waitForCrossfade();
+    player->updateBPM(65);  waitForCrossfade();
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  T-11  Volumes correct after crossfade
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, VolumesCorrectAfterCrossfade) {
+    player->updateBPM(85);
+    waitForCrossfade();
+    EXPECT_EQ(player->debugVolumeIn(),  128);
+    EXPECT_EQ(player->debugVolumeOut(),   0);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  T-12  Not crossfading after transition completes
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, NotCrossfadingAfterTransition) {
+    player->crossfadeTo(MusicZone::ZONE_3);
     waitForCrossfade();
     EXPECT_FALSE(player->isCrossfading());
 }
 
-// T-12  Callback fires on transition completion
+// ─────────────────────────────────────────────────────────────
+//  T-13  Callback fires on transition completion
+// ─────────────────────────────────────────────────────────────
 TEST_F(MusicPlayerTest, TransitionCallbackFires) {
-    MusicMode reported = MusicMode::CALM;
-    player->setTransitionCallback([&](MusicMode m){ reported = m; });
-
-    player->updateBPM(110);
+    MusicZone reported = MusicZone::ZONE_1;
+    player->setTransitionCallback([&](MusicZone z){ reported = z; });
+    player->updateBPM(85);
     waitForCrossfade();
-    EXPECT_EQ(reported, MusicMode::ACTIVE);
+    EXPECT_EQ(reported, MusicZone::ZONE_2);
 }
 
-// T-13  crossfade() is a no-op when already in target mode
-TEST_F(MusicPlayerTest, CrossfadeToSameModeIsNoop) {
-    size_t callsBefore = mock->log.size();
-    player->crossfade(MusicMode::CALM);   // already CALM
+// ─────────────────────────────────────────────────────────────
+//  T-14  crossfadeTo same zone is a no-op
+// ─────────────────────────────────────────────────────────────
+TEST_F(MusicPlayerTest, CrossfadeToSameZoneIsNoop) {
+    size_t before = mock->log.size();
+    player->crossfadeTo(MusicZone::ZONE_1);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(mock->log.size(), callsBefore);  // no extra backend calls
+    EXPECT_EQ(mock->log.size(), before);
 }
 
-// T-14  crossfade() is a no-op when backend not ready
+// ─────────────────────────────────────────────────────────────
+//  T-15  crossfadeTo no-op when backend not ready
+// ─────────────────────────────────────────────────────────────
 TEST_F(MusicPlayerTest, CrossfadeNoopWhenBackendNotReady) {
     mock->ready = false;
-    player->crossfade(MusicMode::ACTIVE);
+    player->crossfadeTo(MusicZone::ZONE_2);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(player->currentMode(), MusicMode::CALM);
+    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
 }
 
-// T-15  Rapid BPM updates don't deadlock or crash
+// ─────────────────────────────────────────────────────────────
+//  T-16  Rapid BPM updates across all 6 zones — stable
+// ─────────────────────────────────────────────────────────────
 TEST_F(MusicPlayerTest, RapidBPMUpdatesStable) {
-    for (int i = 0; i < 20; ++i) {
-        player->updateBPM((i % 2 == 0) ? 110 : 60);
+    int bpms[] = {65, 85, 105, 125, 150, 170, 130, 95, 70, 160};
+    for (int b : bpms) {
+        player->updateBPM(b);
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
     waitForCrossfade(5000);
-    // Simply must not crash or hang; mode must be valid
-    const MusicMode m = player->currentMode();
-    EXPECT_TRUE(m == MusicMode::CALM || m == MusicMode::ACTIVE);
+    auto z = player->currentZone();
+    EXPECT_TRUE(z >= MusicZone::ZONE_1 && z <= MusicZone::ZONE_6);
 }

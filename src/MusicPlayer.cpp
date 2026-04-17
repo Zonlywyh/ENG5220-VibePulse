@@ -1,11 +1,11 @@
 // ============================================================
 //  MusicPlayer.cpp  —  VibePulse ENG5220
+//  6-zone BPM-driven music player with 1-second crossfade
 // ============================================================
 
 #include "MusicPlayer.h"
-#include <algorithm>
-#include <chrono>
 #include <stdexcept>
+#include <chrono>
 
 // ─────────────────────────────────────────────────────────────
 //  Ctor / Dtor
@@ -18,57 +18,66 @@ MusicPlayer::MusicPlayer(std::shared_ptr<IAudioBackend> backend)
 }
 
 MusicPlayer::~MusicPlayer() {
-    // Signal any running crossfade to stop, then join
     m_stopRequested.store(true);
     if (m_worker.joinable())
         m_worker.join();
 
-    // Release loaded tracks
-    if (m_handleCalm   >= 0) m_backend->freeTrack(m_handleCalm);
-    if (m_handleActive >= 0) m_backend->freeTrack(m_handleActive);
+    for (auto& handles : m_zoneHandles)
+        for (int h : handles)
+            m_backend->freeTrack(h);
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Load
+//  Load tracks for a zone
 // ─────────────────────────────────────────────────────────────
-bool MusicPlayer::loadTracks(const std::string& calmPath,
-                              const std::string& activePath) {
-    m_handleCalm   = m_backend->loadTrack(calmPath);
-    m_handleActive = m_backend->loadTrack(activePath);
+bool MusicPlayer::loadZone(MusicZone zone,
+                            const std::vector<std::string>& paths) {
+    auto& handles = m_zoneHandles[static_cast<int>(zone)];
 
-    if (m_handleCalm < 0 || m_handleActive < 0)
-        return false;
+    for (const auto& p : paths) {
+        int h = m_backend->loadTrack(p);
+        if (h < 0) return false;
+        handles.push_back(h);
+    }
 
-    // Start calm track at full volume; active track silent
-    m_backend->play(m_handleCalm,   -1);
-    m_backend->play(m_handleActive, -1);
-    m_backend->setVolume(m_handleCalm,   128);
-    m_backend->setVolume(m_handleActive,   0);
-    m_volCalm.store(128);
-    m_volActive.store(0);
+    // Auto-start Zone 1 on first load
+    if (zone == MusicZone::ZONE_1 && m_currentHandle < 0 && !handles.empty()) {
+        m_currentHandle = handles[0];
+        m_backend->play(m_currentHandle, -1);
+        m_backend->setVolume(m_currentHandle, 128);
+        m_volIn.store(128);
+    }
     return true;
 }
 
 // ─────────────────────────────────────────────────────────────
-//  BPM → mode mapping  (hysteresis prevents rapid toggling)
+//  BPM → zone transition
 // ─────────────────────────────────────────────────────────────
 void MusicPlayer::updateBPM(int bpm) {
-    const MusicMode current = m_currentMode.load();
+    MusicZone target = bpmToZone(bpm);
+    if (target != m_currentZone.load())
+        crossfadeTo(target);
+}
 
-    if (current == MusicMode::CALM  && bpm >= BPM_ACTIVE_THRESHOLD) {
-        crossfade(MusicMode::ACTIVE);
-    } else if (current == MusicMode::ACTIVE && bpm <= BPM_CALM_THRESHOLD) {
-        crossfade(MusicMode::CALM);
-    }
-    // In-between zone: stay in current mode (hysteresis band 81-99 BPM)
+// ─────────────────────────────────────────────────────────────
+//  Pick a random track handle from a zone
+// ─────────────────────────────────────────────────────────────
+int MusicPlayer::pickRandom(MusicZone zone) {
+    auto& handles = m_zoneHandles[static_cast<int>(zone)];
+    if (handles.empty()) return -1;
+    std::uniform_int_distribution<int> dist(0, static_cast<int>(handles.size()) - 1);
+    return handles[dist(m_rng)];
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Non-blocking crossfade launcher
 // ─────────────────────────────────────────────────────────────
-void MusicPlayer::crossfade(MusicMode nextMode) {
-    if (m_currentMode.load() == nextMode) return;    // already there
-    if (!m_backend->isReady())            return;    // audio not initialised
+void MusicPlayer::crossfadeTo(MusicZone next) {
+    if (m_currentZone.load() == next) return;
+    if (!m_backend->isReady())        return;
+
+    int hIn = pickRandom(next);
+    if (hIn < 0) return;
 
     // Interrupt any in-flight crossfade
     m_stopRequested.store(true);
@@ -78,64 +87,58 @@ void MusicPlayer::crossfade(MusicMode nextMode) {
     m_stopRequested.store(false);
     m_crossfading.store(true);
 
-    const MusicMode from = m_currentMode.load();
-    // Launch detached — ownership transferred into lambda
-    m_worker = std::thread([this, from, nextMode]() {
-        runCrossfade(from, nextMode);
+    int hOut = m_currentHandle;
+    m_currentHandle = hIn;
+
+    m_backend->play(hIn, -1);
+    m_backend->setVolume(hIn, 0);
+
+    m_worker = std::thread([this, hOut, hIn, next]() {
+        runCrossfade(hOut, hIn, next);
     });
-    m_worker.detach();   // fire-and-forget; state is managed atomically
+    m_worker.detach();
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Crossfade worker  (runs on a background thread)
+//  Crossfade worker — fades hOut 128→0, hIn 0→128 over 1s
 // ─────────────────────────────────────────────────────────────
-void MusicPlayer::runCrossfade(MusicMode from, MusicMode to) {
-    // Determine which handle is fading in / out
-    const int hIn  = (to == MusicMode::ACTIVE) ? m_handleActive : m_handleCalm;
-    const int hOut = (to == MusicMode::ACTIVE) ? m_handleCalm   : m_handleActive;
-
+void MusicPlayer::runCrossfade(int hOut, int hIn, MusicZone next) {
     for (int step = 1; step <= CROSSFADE_STEPS; ++step) {
         if (m_stopRequested.load()) {
-            // Interrupted — leave volumes where they are; caller will reset
             m_crossfading.store(false);
             return;
         }
 
-        const int volIn  = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
-        const int volOut = 128 - volIn;
+        int volIn  = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
+        int volOut = 128 - volIn;
 
-        m_backend->setVolume(hIn,  volIn);
-        m_backend->setVolume(hOut, volOut);
+        if (hIn  >= 0) m_backend->setVolume(hIn,  volIn);
+        if (hOut >= 0) m_backend->setVolume(hOut, volOut);
 
-        // Track atomic volume mirrors (readable by tests)
-        if (to == MusicMode::ACTIVE) {
-            m_volActive.store(volIn);
-            m_volCalm.store(volOut);
-        } else {
-            m_volCalm.store(volIn);
-            m_volActive.store(volOut);
-        }
+        m_volIn.store(volIn);
+        m_volOut.store(volOut);
 
         std::this_thread::sleep_for(
             std::chrono::milliseconds(CROSSFADE_STEP_MS));
     }
 
-    // Guarantee clean end-state
-    m_backend->setVolume(hIn,  128);
-    m_backend->setVolume(hOut,   0);
+    if (hIn  >= 0) m_backend->setVolume(hIn,  128);
+    if (hOut >= 0) {
+        m_backend->setVolume(hOut, 0);
+        m_backend->halt(hOut);
+    }
 
-    if (to == MusicMode::ACTIVE) { m_volActive.store(128); m_volCalm.store(0); }
-    else                         { m_volCalm.store(128);   m_volActive.store(0); }
-
-    m_currentMode.store(to);
+    m_volIn.store(128);
+    m_volOut.store(0);
+    m_currentZone.store(next);
     m_crossfading.store(false);
 
-    if (m_onTransition) m_onTransition(to);
+    if (m_onTransition) m_onTransition(next);
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Callback setter
 // ─────────────────────────────────────────────────────────────
-void MusicPlayer::setTransitionCallback(std::function<void(MusicMode)> cb) {
+void MusicPlayer::setTransitionCallback(std::function<void(MusicZone)> cb) {
     m_onTransition = std::move(cb);
 }
