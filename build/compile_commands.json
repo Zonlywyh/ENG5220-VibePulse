@@ -1,0 +1,26 @@
+[
+{
+  "directory": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/build",
+  "command": "/usr/bin/c++  -I/home/vibepulsegroup/vibe/ENG5220-VibePulse/include -g -std=c++17 -o CMakeFiles/vibepulse_hr.dir/src/main.cpp.o -c /home/vibepulsegroup/vibe/ENG5220-VibePulse/src/main.cpp",
+  "file": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/main.cpp",
+  "output": "CMakeFiles/vibepulse_hr.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/build",
+  "command": "/usr/bin/c++  -I/home/vibepulsegroup/vibe/ENG5220-VibePulse/include -g -std=c++17 -o CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o -c /home/vibepulsegroup/vibe/ENG5220-VibePulse/src/HeartRateCalculator.cpp",
+  "file": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/HeartRateCalculator.cpp",
+  "output": "CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o"
+},
+{
+  "directory": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/build",
+  "command": "/usr/bin/c++  -I/home/vibepulsegroup/vibe/ENG5220-VibePulse/include -g -std=c++17 -o CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o -c /home/vibepulsegroup/vibe/ENG5220-VibePulse/src/Sensor.cpp",
+  "file": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/Sensor.cpp",
+  "output": "CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o"
+},
+{
+  "directory": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/build",
+  "command": "/usr/bin/c++  -I/home/vibepulsegroup/vibe/ENG5220-VibePulse/include -g -std=c++17 -o CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o -c /home/vibepulsegroup/vibe/ENG5220-VibePulse/src/dsp.cpp",
+  "file": "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/dsp.cpp",
+  "output": "CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o"
+}
+]
