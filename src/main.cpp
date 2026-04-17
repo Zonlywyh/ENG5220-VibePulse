@@ -1,5 +1,5 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/sensor.h"
+#include "../include/Sensor.h"
 
 #include <iostream>
 #include <thread>
@@ -91,6 +91,19 @@ int main(int argc, char** argv) {
         };
 
         std::unique_ptr<ZoneMusicPlayer> zone_player;
+        std::optional<int> audio_target_zone;
+        std::optional<int> last_logged_audio_target_zone;
+        std::optional<int> last_logged_audio_current_zone;
+        std::optional<std::array<std::string, ZoneMusicPlayer::kZoneCount>> audio_zone_paths;
+
+        auto bpm_to_zone = [](int bpm) -> int {
+            if (bpm <= 60) return 1;
+            if (bpm <= 70) return 2;
+            if (bpm <= 80) return 3;
+            if (bpm <= 90) return 4;
+            if (bpm <= 100) return 5;
+            return 6;
+        };
         try {
             auto backend = std::make_shared<SDL2AudioBackend>();
             zone_player = std::make_unique<ZoneMusicPlayer>(backend);
@@ -117,6 +130,7 @@ int main(int argc, char** argv) {
                     std::cout << "[AUDIO] zone" << z << " -> " << paths[z - 1] << std::endl;
                 }
                 std::cout << "[AUDIO] initial -> zone1 -> " << paths[0] << std::endl;
+                audio_zone_paths = paths;
 
                 // Print which zone/track became active after each crossfade completes.
                 zone_player->setTransitionCallback([paths](int zone) {
@@ -191,7 +205,26 @@ int main(int argc, char** argv) {
 
 #ifdef VIBEPULSE_ENABLE_AUDIO
             if (zone_player && finger && rounded_bpm.has_value()) {
+                audio_target_zone = bpm_to_zone(*rounded_bpm);
+                if (!last_logged_audio_target_zone.has_value() ||
+                    *audio_target_zone != *last_logged_audio_target_zone) {
+                    std::cout << "[AUDIO] bpm=" << *rounded_bpm
+                              << " -> target zone" << *audio_target_zone << std::endl;
+                    if (audio_zone_paths.has_value()) {
+                        const auto& paths = *audio_zone_paths;
+                        std::cout << "[AUDIO] target track -> " << paths[*audio_target_zone - 1] << std::endl;
+                    }
+                    last_logged_audio_target_zone = *audio_target_zone;
+                }
+
                 zone_player->updateBPM(*rounded_bpm);
+
+                const int current_zone = zone_player->currentZone();
+                if (!last_logged_audio_current_zone.has_value() ||
+                    current_zone != *last_logged_audio_current_zone) {
+                    std::cout << "[AUDIO] current zone -> " << current_zone << std::endl;
+                    last_logged_audio_current_zone = current_zone;
+                }
             }
 #endif
 
