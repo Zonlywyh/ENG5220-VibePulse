@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/vibepulsegroup/vibe/ENG5220-VibePulse
+CMAKE_SOURCE_DIR = /home/vibepulsegroup/ENG5220-VibePulse
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/vibepulsegroup/vibe/ENG5220-VibePulse/build
+CMAKE_BINARY_DIR = /home/vibepulsegroup/ENG5220-VibePulse/build
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/vibepulsegroup/vibe/ENG5220-VibePulse/build/CMakeFiles /home/vibepulsegroup/vibe/ENG5220-VibePulse/build//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/vibepulsegroup/ENG5220-VibePulse/build/CMakeFiles /home/vibepulsegroup/ENG5220-VibePulse/build//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/vibepulsegroup/vibe/ENG5220-VibePulse/build/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/vibepulsegroup/ENG5220-VibePulse/build/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -153,6 +153,30 @@ src/HeartRateCalculator.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.s
 .PHONY : src/HeartRateCalculator.cpp.s
 
+src/MusicPlayer.o: src/MusicPlayer.cpp.o
+.PHONY : src/MusicPlayer.o
+
+# target to build an object file
+src/MusicPlayer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/MusicPlayer.cpp.o
+.PHONY : src/MusicPlayer.cpp.o
+
+src/MusicPlayer.i: src/MusicPlayer.cpp.i
+.PHONY : src/MusicPlayer.i
+
+# target to preprocess a source file
+src/MusicPlayer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/MusicPlayer.cpp.i
+.PHONY : src/MusicPlayer.cpp.i
+
+src/MusicPlayer.s: src/MusicPlayer.cpp.s
+.PHONY : src/MusicPlayer.s
+
+# target to generate assembly for a file
+src/MusicPlayer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/MusicPlayer.cpp.s
+.PHONY : src/MusicPlayer.cpp.s
+
 src/Sensor.o: src/Sensor.cpp.o
 .PHONY : src/Sensor.o
 
@@ -176,6 +200,30 @@ src/Sensor.s: src/Sensor.cpp.s
 src/Sensor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.s
 .PHONY : src/Sensor.cpp.s
+
+src/ZoneMusicPlayer.o: src/ZoneMusicPlayer.cpp.o
+.PHONY : src/ZoneMusicPlayer.o
+
+# target to build an object file
+src/ZoneMusicPlayer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/ZoneMusicPlayer.cpp.o
+.PHONY : src/ZoneMusicPlayer.cpp.o
+
+src/ZoneMusicPlayer.i: src/ZoneMusicPlayer.cpp.i
+.PHONY : src/ZoneMusicPlayer.i
+
+# target to preprocess a source file
+src/ZoneMusicPlayer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/ZoneMusicPlayer.cpp.i
+.PHONY : src/ZoneMusicPlayer.cpp.i
+
+src/ZoneMusicPlayer.s: src/ZoneMusicPlayer.cpp.s
+.PHONY : src/ZoneMusicPlayer.s
+
+# target to generate assembly for a file
+src/ZoneMusicPlayer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vibepulse_hr.dir/build.make CMakeFiles/vibepulse_hr.dir/src/ZoneMusicPlayer.cpp.s
+.PHONY : src/ZoneMusicPlayer.cpp.s
 
 src/dsp.o: src/dsp.cpp.o
 .PHONY : src/dsp.o
@@ -237,9 +285,15 @@ help:
 	@echo "... src/HeartRateCalculator.o"
 	@echo "... src/HeartRateCalculator.i"
 	@echo "... src/HeartRateCalculator.s"
+	@echo "... src/MusicPlayer.o"
+	@echo "... src/MusicPlayer.i"
+	@echo "... src/MusicPlayer.s"
 	@echo "... src/Sensor.o"
 	@echo "... src/Sensor.i"
 	@echo "... src/Sensor.s"
+	@echo "... src/ZoneMusicPlayer.o"
+	@echo "... src/ZoneMusicPlayer.i"
+	@echo "... src/ZoneMusicPlayer.s"
 	@echo "... src/dsp.o"
 	@echo "... src/dsp.i"
 	@echo "... src/dsp.s"

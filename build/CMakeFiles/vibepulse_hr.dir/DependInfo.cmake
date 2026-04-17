@@ -8,10 +8,12 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/HeartRateCalculator.cpp" "CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o.d"
-  "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/Sensor.cpp" "CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o.d"
-  "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/dsp.cpp" "CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o.d"
-  "/home/vibepulsegroup/vibe/ENG5220-VibePulse/src/main.cpp" "CMakeFiles/vibepulse_hr.dir/src/main.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/main.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/HeartRateCalculator.cpp" "CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/HeartRateCalculator.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/MusicPlayer.cpp" "CMakeFiles/vibepulse_hr.dir/src/MusicPlayer.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/MusicPlayer.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/Sensor.cpp" "CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/Sensor.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/ZoneMusicPlayer.cpp" "CMakeFiles/vibepulse_hr.dir/src/ZoneMusicPlayer.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/ZoneMusicPlayer.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/dsp.cpp" "CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/dsp.cpp.o.d"
+  "/home/vibepulsegroup/ENG5220-VibePulse/src/main.cpp" "CMakeFiles/vibepulse_hr.dir/src/main.cpp.o" "gcc" "CMakeFiles/vibepulse_hr.dir/src/main.cpp.o.d"
   "" "vibepulse_hr" "gcc" "CMakeFiles/vibepulse_hr.dir/link.d"
   )
 

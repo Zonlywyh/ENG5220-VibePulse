@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/vibepulsegroup/vibe/ENG5220-VibePulse/include
+CXX_INCLUDES = -I/home/vibepulsegroup/ENG5220-VibePulse/include
 
-CXX_FLAGS = -g -std=c++17
+CXX_FLAGS = -std=c++17
 
