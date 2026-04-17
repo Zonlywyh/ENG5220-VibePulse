@@ -7,16 +7,17 @@
  * @brief Digital Signal Processing class for MAX30102
  * MAX30102 数字信号处理类
  */
-class HeartRateDSP {
+class HeartRateDSP
+{
 private:
     // Filter parameters / 滤波器参数
-    float dc_filter_w;      // DC filter state / 直流滤波状态
-    float lpf_v_prev;       // Previous low-pass value / 上一次低通滤波值
-    const float alpha;      // High-pass coefficient / 高通系数
-    const float lpf_beta;   // Low-pass coefficient / 低通系数
+    float dc_filter_w;    // DC filter state / 直流滤波状态
+    float lpf_v_prev;     // Previous low-pass value / 上一次低通滤波值
+    const float alpha;    // High-pass coefficient / 高通系数
+    const float lpf_beta; // Low-pass coefficient / 低通系数
 
     // Heart rate tracking / 心率追踪变量
-    uint32_t last_peak_time; 
+    uint32_t last_peak_time;
     float current_bpm;
 
     // Peak detection state / 波峰检测状态
@@ -42,7 +43,7 @@ public:
      * 应用高通和低通滤波器以提取交流信号
      *
      */
-    float processSample(uint32_t raw_val);
+    float processSample(float raw_val);
 
     /**
      * @brief Analyze filtered signal to calculate BPM

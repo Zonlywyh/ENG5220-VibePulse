@@ -1,0 +1,110 @@
+{
+  "tests": 16,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "Construction",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "ThrowsOnNullBackend",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 72
+        }
+      ]
+    },
+    {
+      "name": "MusicPlayerTest",
+      "tests": 13,
+      "testsuite": [
+        {
+          "name": "LoadZoneLoadsAllTracks",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 79
+        },
+        {
+          "name": "InitialZoneIsZone1",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 96
+        },
+        {
+          "name": "BPM65StaysInZone1",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 121
+        },
+        {
+          "name": "BPM85TransitionsToZone2",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 131
+        },
+        {
+          "name": "BPM150TransitionsToZone5",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 140
+        },
+        {
+          "name": "BPM170TransitionsToZone6",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 149
+        },
+        {
+          "name": "BPMDropFromZone6ToZone1",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 158
+        },
+        {
+          "name": "VolumesCorrectAfterCrossfade",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 167
+        },
+        {
+          "name": "NotCrossfadingAfterTransition",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 177
+        },
+        {
+          "name": "TransitionCallbackFires",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 186
+        },
+        {
+          "name": "CrossfadeToSameZoneIsNoop",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 197
+        },
+        {
+          "name": "CrossfadeNoopWhenBackendNotReady",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 207
+        },
+        {
+          "name": "RapidBPMUpdatesStable",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 217
+        }
+      ]
+    },
+    {
+      "name": "MusicPlayerLoad",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "ReturnsFalseOnBackendFailure",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "name": "BpmMapping",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "AllZoneBoundaries",
+          "file": "E:\/UofG\/s2\/realtime\/vibepulse\/ENG5220-VibePulse\/src\/test_MusicPlayer.cpp",
+          "line": 103
+        }
+      ]
+    }
+  ]
+}

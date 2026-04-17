@@ -1,0 +1,4 @@
+E:/UofG/s2/realtime/vibepulse/ENG5220-VibePulse/build/CMakeFiles/music_player_core.dir
+E:/UofG/s2/realtime/vibepulse/ENG5220-VibePulse/build/CMakeFiles/run_tests.dir
+E:/UofG/s2/realtime/vibepulse/ENG5220-VibePulse/build/CMakeFiles/edit_cache.dir
+E:/UofG/s2/realtime/vibepulse/ENG5220-VibePulse/build/CMakeFiles/rebuild_cache.dir
