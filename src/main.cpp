@@ -1,11 +1,17 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/Sensor.h"
+#include "../include/sensor.h"
+#include "../include/MusicPlayer.h"
+#include "../include/SDL2AudioBackend.h"
 
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <atomic>
 #include <csignal>
+#include <filesystem>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 static std::atomic<bool> g_running{true};
 
@@ -27,6 +33,25 @@ double sampleRateToHz(SampleRate rate) {
     }
 }
 
+// 扫描某个 zone 文件夹下所有 .wav 文件
+std::vector<std::string> getZoneTracks(int zone) {
+    std::string path = "assets/music/zone" + std::to_string(zone);
+    std::vector<std::string> tracks;
+    if (!std::filesystem::exists(path)) {
+        std::cerr << "[WARN] Music folder not found: " << path << std::endl;
+        return tracks;
+    }
+    for (auto& entry : std::filesystem::directory_iterator(path)) {
+        if (entry.path().extension() == ".wav") {
+            tracks.push_back(entry.path().string());
+        }
+    }
+    std::sort(tracks.begin(), tracks.end());
+    std::cout << "[INFO] Zone " << zone << ": "
+              << tracks.size() << " tracks loaded" << std::endl;
+    return tracks;
+}
+
 int main() {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
@@ -35,33 +60,65 @@ int main() {
     SampleAverage avg = SAMPLEAVG_4;
     SampleRate rate = SAMPLERATE_100;
     LedPulseWidth width = PULSEWIDTH_411;
+
     try {
+        // ── 传感器初始化 ──────────────────────────────────────
         Max30102Sensor sensor(interruptPin, avg, rate, width);
 
         if (!sensor.initialize()) {
-            std::cerr << "Sensor initialization failed." << std::endl;
+            std::cerr << "[ERROR] Sensor initialization failed." << std::endl;
             return 1;
         }
 
         HeartRateCalculator hr(sampleRateToHz(rate));
 
         sensor.setDataCallback([&hr](const std::vector<Sample>& samples) {
-            std::cout << "callback called, samples=" << samples.size() << std::endl;//test
             hr.processSamples(samples);
         });
 
+        // ── MusicPlayer 初始化 ────────────────────────────────
+        auto backend = std::make_shared<SDL2AudioBackend>();
+        MusicPlayer player(backend);
+
+        player.loadZone(MusicZone::ZONE_1, getZoneTracks(1));
+        player.loadZone(MusicZone::ZONE_2, getZoneTracks(2));
+        player.loadZone(MusicZone::ZONE_3, getZoneTracks(3));
+        player.loadZone(MusicZone::ZONE_4, getZoneTracks(4));
+        player.loadZone(MusicZone::ZONE_5, getZoneTracks(5));
+        player.loadZone(MusicZone::ZONE_6, getZoneTracks(6));
+
+        // 区间切换时打印日志
+        player.setTransitionCallback([](MusicZone zone) {
+            const char* names[] = {
+                "Zone1 (60-79 BPM)",
+                "Zone2 (80-99 BPM)",
+                "Zone3 (100-119 BPM)",
+                "Zone4 (120-139 BPM)",
+                "Zone5 (140-159 BPM)",
+                "Zone6 (160-180 BPM)"
+            };
+            std::cout << "[MUSIC] --> "
+                      << names[static_cast<int>(zone)] << std::endl;
+        });
+
         sensor.start();
+        std::cout << "VibePulse started. Press Ctrl+C to stop." << std::endl;
 
-        std::cout << "Heart rate monitor started. Press Ctrl+C to stop." << std::endl;
-
+        // ── 主循环 ────────────────────────────────────────────
         while (g_running) {
             bool finger = hr.fingerDetected();
-            auto bpm = hr.getLatestBpm();
+            auto bpm    = hr.getLatestBpm();
 
             if (!finger) {
                 std::cout << "[INFO] No finger detected." << std::endl;
             } else if (bpm.has_value()) {
-                std::cout << "[INFO] Heart Rate: " << *bpm << " BPM" << std::endl;
+                int bpmInt = static_cast<int>(*bpm);
+                std::cout << "[INFO] Heart Rate: " << bpmInt << " BPM"
+                          << " | Zone: " << (static_cast<int>(bpmToZone(bpmInt)) + 1)
+                          << std::endl;
+
+                // ── 关键对接点 ────────────────────────────────
+                player.updateBPM(bpmInt);
             } else {
                 std::cout << "[INFO] Measuring..." << std::endl;
             }
@@ -71,8 +128,9 @@ int main() {
 
         sensor.stop();
         std::cout << "Stopped." << std::endl;
+
     } catch (const std::exception& e) {
-        std::cerr << "Fatal error: " << e.what() << std::endl;
+        std::cerr << "[ERROR] Fatal: " << e.what() << std::endl;
         return 1;
     }
 
