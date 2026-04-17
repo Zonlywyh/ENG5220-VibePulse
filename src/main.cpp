@@ -1,5 +1,5 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/sensor.h"
+#include "../include/Sensor.h"
 
 #include <iostream>
 #include <thread>

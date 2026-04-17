@@ -26,6 +26,8 @@ add_executable(vibepulse_hr
     src/ZoneMusicPlayer.cpp
 )
 
+target_compile_features(vibepulse_hr PRIVATE cxx_std_17)
+
 target_include_directories(vibepulse_hr
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
