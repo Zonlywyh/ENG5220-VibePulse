@@ -1,4 +1,4 @@
-#include "../include/Sensor.h"
+#include "../include/sensor.h"
 
 #include <algorithm>
 #include <cerrno>

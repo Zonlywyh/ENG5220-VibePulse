@@ -13,11 +13,15 @@ if(NOT GPIOD_LIBRARY)
     message(FATAL_ERROR "libgpiod not found. Install libgpiod development files on the target system.")
 endif()
 
+option(VIBEPULSE_ENABLE_AUDIO "Enable SDL2/SDL2_mixer audio playback" OFF)
+
 add_executable(vibepulse_hr
     src/main.cpp
     src/HeartRateCalculator.cpp
     src/Sensor.cpp
     src/dsp.cpp
+    src/MusicPlayer.cpp
+    src/ZoneMusicPlayer.cpp
 )
 
 target_include_directories(vibepulse_hr
@@ -30,3 +34,13 @@ target_link_libraries(vibepulse_hr
         Threads::Threads
         ${GPIOD_LIBRARY}
 )
+
+if(VIBEPULSE_ENABLE_AUDIO)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+    pkg_check_modules(SDL2_MIXER REQUIRED SDL2_mixer)
+
+    target_compile_definitions(vibepulse_hr PRIVATE VIBEPULSE_ENABLE_AUDIO=1)
+    target_include_directories(vibepulse_hr PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_MIXER_INCLUDE_DIRS})
+    target_link_libraries(vibepulse_hr PRIVATE ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES})
+endif()

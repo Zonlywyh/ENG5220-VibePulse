@@ -1,5 +1,5 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/Sensor.h"
+#include "../include/sensor.h"
 
 #include <iostream>
 #include <thread>
@@ -9,6 +9,14 @@
 #include <string>
 #include <mutex>
 #include <optional>
+
+#ifdef VIBEPULSE_ENABLE_AUDIO
+#include "../include/SDL2AudioBackend.h"
+#include "../include/ZoneMusicPlayer.h"
+#include <filesystem>
+#include <array>
+#include <vector>
+#endif
 
 static std::atomic<bool> g_running{true};
 
@@ -30,7 +38,7 @@ double sampleRateToHz(SampleRate rate) {
     }
 }
 
-int main() {
+int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
@@ -51,6 +59,76 @@ int main() {
         std::mutex finger_event_mutex;
         std::optional<int> latest_callback_bpm;
         std::optional<bool> latest_finger_state;
+
+#ifdef VIBEPULSE_ENABLE_AUDIO
+        // Optional audio bring-up:
+        // - Expects `assets/music/zone1..zone6/` each containing at least one `.wav`.
+        // - Override root via: `--music-root <path>`.
+        std::string music_root = "assets/music";
+        for (int i = 1; i + 1 < argc; ++i) {
+            if (std::string(argv[i]) == "--music-root") {
+                music_root = argv[i + 1];
+            }
+        }
+
+        auto pick_zone_wav = [&](int zone) -> std::optional<std::string> {
+            namespace fs = std::filesystem;
+            const fs::path dir = fs::path(music_root) / ("zone" + std::to_string(zone));
+            std::vector<fs::path> wavs;
+            std::error_code ec;
+            if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) return std::nullopt;
+            for (const auto& entry : fs::directory_iterator(dir, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file(ec)) continue;
+                const auto ext = entry.path().extension().string();
+                if (ext == ".wav" || ext == ".WAV") {
+                    wavs.push_back(entry.path());
+                }
+            }
+            if (wavs.empty()) return std::nullopt;
+            std::sort(wavs.begin(), wavs.end());
+            return wavs.front().string();
+        };
+
+        std::unique_ptr<ZoneMusicPlayer> zone_player;
+        try {
+            auto backend = std::make_shared<SDL2AudioBackend>();
+            zone_player = std::make_unique<ZoneMusicPlayer>(backend);
+
+            std::array<std::string, ZoneMusicPlayer::kZoneCount> paths{};
+            bool ok = true;
+            for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
+                auto p = pick_zone_wav(z);
+                if (!p.has_value()) {
+                    std::cerr << "[AUDIO] Missing .wav in: " << (music_root + "/zone" + std::to_string(z))
+                              << std::endl;
+                    ok = false;
+                    break;
+                }
+                paths[z - 1] = *p;
+            }
+
+            if (ok && !zone_player->loadZoneTracks(paths)) {
+                std::cerr << "[AUDIO] Failed to load zone tracks. Check WAV format/paths." << std::endl;
+                zone_player.reset();
+            } else if (zone_player) {
+                std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
+                for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
+                    std::cout << "[AUDIO] zone" << z << " -> " << paths[z - 1] << std::endl;
+                }
+                std::cout << "[AUDIO] initial -> zone1 -> " << paths[0] << std::endl;
+
+                // Print which zone/track became active after each crossfade completes.
+                zone_player->setTransitionCallback([paths](int zone) {
+                    if (zone < 1 || zone > static_cast<int>(paths.size())) return;
+                    std::cout << "[AUDIO] now -> zone" << zone << " -> " << paths[zone - 1] << std::endl;
+                });
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[AUDIO] Disabled: " << e.what() << std::endl;
+            zone_player.reset();
+        }
+#endif
 
         sensor.setDataCallback([&hr](const std::vector<Sample>& samples) {
             hr.processSamples(samples);
@@ -110,6 +188,12 @@ int main() {
             } else {
                 status_message = "[INFO] Measuring...";
             }
+
+#ifdef VIBEPULSE_ENABLE_AUDIO
+            if (zone_player && finger && rounded_bpm.has_value()) {
+                zone_player->updateBPM(*rounded_bpm);
+            }
+#endif
 
             auto now = std::chrono::steady_clock::now();
             bool status_changed = (status_message != last_status);
