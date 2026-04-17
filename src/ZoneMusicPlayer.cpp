@@ -37,6 +37,7 @@ void ZoneMusicPlayer::freeTracks() {
             h = -1;
         }
     }
+    m_pathsLoaded.store(false);
 }
 
 bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& zonePaths) {
@@ -45,6 +46,7 @@ bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& 
 
     // Load all tracks first.
     for (int i = 0; i < kZoneCount; ++i) {
+        m_zonePaths[i] = zonePaths[i];
         m_handles[i] = m_backend->loadTrack(zonePaths[i]);
         if (m_handles[i] < 0) {
             // Best-effort cleanup if any load fails.
@@ -52,6 +54,7 @@ bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& 
             return false;
         }
     }
+    m_pathsLoaded.store(true);
 
     // Start all tracks looping, but only zone1 audible initially.
     for (int i = 0; i < kZoneCount; ++i) {
@@ -60,6 +63,13 @@ bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& 
     }
     m_currentZone.store(1);
     return true;
+}
+
+std::optional<std::string> ZoneMusicPlayer::currentTrackPath() const {
+    if (!m_pathsLoaded.load()) return std::nullopt;
+    const int zone = m_currentZone.load();
+    if (zone < 1 || zone > kZoneCount) return std::nullopt;
+    return m_zonePaths[zone - 1];
 }
 
 int ZoneMusicPlayer::bpmToZone(int bpm) const {

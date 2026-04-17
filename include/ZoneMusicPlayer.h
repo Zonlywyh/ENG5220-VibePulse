@@ -13,6 +13,8 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
 #include <thread>
 
 class ZoneMusicPlayer {
@@ -35,6 +37,9 @@ public:
     int  currentZone() const { return m_currentZone.load(); }
     bool isCrossfading() const { return m_crossfading.load(); }
 
+    // Returns the currently-active track path (zone1..zone6) once loaded.
+    std::optional<std::string> currentTrackPath() const;
+
     void setTransitionCallback(std::function<void(int zone)> cb);
 
 private:
@@ -48,6 +53,8 @@ private:
 private:
     std::shared_ptr<IAudioBackend> m_backend;
     std::array<int, kZoneCount>    m_handles{};
+    std::array<std::string, kZoneCount> m_zonePaths{};
+    std::atomic<bool>              m_pathsLoaded{false};
 
     std::atomic<int>               m_currentZone{1};  // 1..6
     std::atomic<bool>              m_crossfading{false};
@@ -56,4 +63,3 @@ private:
     std::thread                    m_worker;
     std::function<void(int)>       m_onTransition;
 };
-
