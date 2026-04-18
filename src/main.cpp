@@ -132,7 +132,12 @@ int main(int argc, char** argv) {
 #endif
 
         sensor.setDataCallback([&hr](const std::vector<Sample>& samples) {
-            hr.processSamples(samples);
+            std::vector<float> ir_samples;
+            ir_samples.reserve(samples.size());
+            for (const Sample& sample : samples) {
+                ir_samples.push_back(sample.ir);
+            }
+            hr.processIrSamples(ir_samples);
         });
 
         hr.setBpmCallback([&](double bpm_value) {
