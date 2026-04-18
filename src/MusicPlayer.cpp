@@ -79,11 +79,10 @@ void MusicPlayer::crossfade(MusicMode nextMode) {
     m_crossfading.store(true);
 
     const MusicMode from = m_currentMode.load();
-    // Launch detached — ownership transferred into lambda
+    // Launch on a background thread; joined on next transition or destruction.
     m_worker = std::thread([this, from, nextMode]() {
         runCrossfade(from, nextMode);
     });
-    m_worker.detach();   // fire-and-forget; state is managed atomically
 }
 
 // ─────────────────────────────────────────────────────────────

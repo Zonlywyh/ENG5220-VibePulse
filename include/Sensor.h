@@ -20,6 +20,7 @@
 #include <functional>
 #include <linux/i2c-dev.h>
 #include <mutex>
+#include <string>
 #include <sys/eventfd.h>
 #include <sys/ioctl.h>
 #include <thread>
@@ -84,6 +85,14 @@ enum LedPulseWidth {
 /**
  * @brief Current sensor operational status.
  */
+enum class SensorStatus {
+    Uninitialized,
+    Initializing,
+    Ready,
+    Running,
+    Stopped,
+    Error
+};
 
 class Max30102Sensor {
 public:
@@ -133,6 +142,8 @@ private:
     int interrupt_pin_;
     mutable std::mutex mutex_;
     std::atomic<bool> running_{false};
+    SensorStatus status_{SensorStatus::Uninitialized};
+    std::string last_error_;
 
     std::deque<Sample> sample_buffer_;
     DataCallback data_callback_;

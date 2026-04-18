@@ -54,7 +54,7 @@ public:
     void updateBPM(int bpm);
 
     // Non-blocking 1-second crossfade; safe to call from any thread
-    // Spawns a detached worker; previous worker is gracefully interrupted.
+    // Spawns a worker thread; previous worker is gracefully interrupted.
     void crossfade(MusicMode nextMode);
 
     // Query
