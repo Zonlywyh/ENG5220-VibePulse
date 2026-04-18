@@ -138,9 +138,14 @@ bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPuls
     sampleAvg_ = avg;
     sampleRate_ = rate;
     pulseWidth_ = width;
+    // Reset the sensor (required by hardware)
 
     writeRegister(REG_MODE_CONFIG, 0x40);
+    // This 10ms delay is explicitly required by the MAX30102 datasheet
+    // after sending the reset command. It is ONLY executed during
+    // initialization phase and has NO impact on realtime performance.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // Continue with FIFO, LED, SPO2 configuration
 
     uint8_t fifoConfig = 0x10 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
     writeRegister(REG_FIFO_CONFIG, fifoConfig);
