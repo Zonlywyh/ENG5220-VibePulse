@@ -101,3 +101,21 @@ Development is managed using GitHub Issues and Projects.
 1. **Clone the repository**
    ```bash
    git clone https://github.com/<your-org>/<your-repo>.git
+   cd ENG5220-VibePulse
+   ```
+
+2. **Install dependencies (Raspberry Pi / Debian/Ubuntu)**
+   - Required (sensor): `libgpiod-dev`
+   - Required (audio, default ON): `pkg-config`, `libsdl2-dev`, `libsdl2-mixer-dev`
+
+3. **Configure & build**
+   ```bash
+   rm -rf build
+   cmake -S . -B build
+   cmake --build build -j
+   ```
+
+4. **(Optional) Disable audio at build time**
+   ```bash
+   cmake -S . -B build -DVIBEPULSE_ENABLE_AUDIO=OFF
+   ```

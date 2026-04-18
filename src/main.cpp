@@ -1,5 +1,5 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/sensor.h"
+#include "../include/Sensor.h"
 
 #include <iostream>
 #include <thread>
@@ -13,6 +13,7 @@
 #ifdef VIBEPULSE_ENABLE_AUDIO
 #include "../include/SDL2AudioBackend.h"
 #include "../include/ZoneMusicPlayer.h"
+#include <algorithm>
 #include <filesystem>
 #include <array>
 #include <vector>
@@ -192,6 +193,16 @@ int main(int argc, char** argv) {
 #ifdef VIBEPULSE_ENABLE_AUDIO
             if (zone_player && finger && rounded_bpm.has_value()) {
                 zone_player->updateBPM(*rounded_bpm);
+            }
+
+            if (zone_player) {
+                if (auto p = zone_player->currentTrackPath(); p.has_value()) {
+                    namespace fs = std::filesystem;
+                    const std::string name = fs::path(*p).stem().string();
+                    if (!name.empty()) {
+                        status_message += " | Music: " + name;
+                    }
+                }
             }
 #endif
 

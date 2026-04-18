@@ -13,7 +13,9 @@ if(NOT GPIOD_LIBRARY)
     message(FATAL_ERROR "libgpiod not found. Install libgpiod development files on the target system.")
 endif()
 
-option(VIBEPULSE_ENABLE_AUDIO "Enable SDL2/SDL2_mixer audio playback" OFF)
+# Audio is a core project feature (heart-rate–driven adaptive music).
+# Set OFF only for sensor-only builds or environments without SDL2/SDL2_mixer.
+option(VIBEPULSE_ENABLE_AUDIO "Enable SDL2/SDL2_mixer audio playback" ON)
 
 add_executable(vibepulse_hr
     src/main.cpp
@@ -23,6 +25,8 @@ add_executable(vibepulse_hr
     src/MusicPlayer.cpp
     src/ZoneMusicPlayer.cpp
 )
+
+target_compile_features(vibepulse_hr PRIVATE cxx_std_17)
 
 target_include_directories(vibepulse_hr
     PRIVATE
