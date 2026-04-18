@@ -63,11 +63,11 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 
 * **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
 * **Labor Division**:
-  **Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
-  **Member 2 (DSP Lead)**: Signal filtering algorithms and peak detection logic.
-  **Member 3 (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
-  **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
-   **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
+  ***Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
+  ***Member 2 (DSP Lead)**: Signal filtering algorithms and peak detection logic.
+  ***Member 3 (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
+  ***Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
+  ***Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
 
 ## 📢 Social Media & Promotion
 *Creating a "buzz" around VibePulse to engage potential users.*
