@@ -33,44 +33,44 @@ University of Glasgow — ENG 5220: Real Time Embedded Programming Team Project
 ---
 
 ## 🚀 Introduction
-VibePulse is a professional-grade, **event-driven embedded system** built on Linux (Raspberry Pi). [cite_start]It solves the real-world challenge [cite: 53, 55] [cite_start]of physiological state management by continuously monitoring heart-rate signals (PPG), inferring stress/relaxation states, and dynamically adapting music playback in realtime[cite: 47, 49].
+VibePulse is a professional-grade, **event-driven embedded system** built on Linux (Raspberry Pi). It solves the real-world challenge of physiological state management by continuously monitoring heart-rate signals (PPG), inferring stress/relaxation states, and dynamically adapting music playback in realtime.
 
 ## 🧠 Real-Time Implementation & DSP
-[cite_start]*In accordance with ENG 5220 marking criteria[cite: 7, 8], this project strictly avoids polling.*
+*In accordance with ENG 5220 marking criteria, this project strictly avoids polling to ensure high responsiveness.*
 
-* [cite_start]**Event-Driven Architecture**: Processing is triggered by hardware interrupts and handled via **asynchronous callbacks** and **timers**[cite: 8, 38].
-* [cite_start]**Multithreading**: We employ thread-based event handling to ensure the system remains responsive, preventing the software from entering an unresponsive wait state[cite: 38, 70].
+* **Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
+* **Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
 * **DSP Pipeline**:
-    * [cite_start]**High-Pass Filter**: DC removal to eliminate static tissue interference[cite: 38].
+    * **High-Pass Filter**: DC removal to eliminate static tissue interference.
     * **Low-Pass Filter**: Removes high-frequency electrical artifacts.
-    * [cite_start]**Quantitative Assessment**: Latencies are monitored to ensure data acquisition and music adaptation happen within physiological constraints[cite: 38].
+    * **Quantitative Assessment**: Latencies are monitored to ensure data acquisition and music adaptation happen within defined tolerances.
 
 ## 💻 Software Structure & Reliability
-[cite_start]*Our code is structured to guarantee high reliability and ease of maintenance[cite: 6].*
+*Our code is structured using Object-Oriented principles to guarantee high reliability and ease of maintenance.*
 
-* [cite_start]**SOLID Principles**: The choice of classes is guided by SOLID principles to ensure modularity and clear rationale[cite: 36].
-* **Encapsulation**: Internal data is strictly private. [cite_start]We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks[cite: 36].
-* [cite_start]**Failsafe Design**: The application is tested to be memory-leak free, ensuring it can run as a standalone embedded product upon boot-up[cite: 36, 58].
+* **SOLID Principles**: The choice of classes is guided by SOLID principles to ensure clear encapsulation and rationale.
+* **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
+* **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
 ## 📌 Key Features
-- [cite_start]📈 **Realtime heart-rate sampling** with event-triggered peak detection[cite: 49].
+- 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
 - 🎵 **Adaptive music selection** based on inferred physiological state.
 - 🧾 **Mood and HR logging** with time-stamped entries for trend analysis.
-- [cite_start]⚙️ **Production-level C++** utilizing Linux kernel-space or userspace interrupt handling[cite: 38, 50].
+- ⚙️ **Production-level C++** running on Raspberry Pi (Linux).
 
 ## 👥 Project Management & Labor Division
-[cite_start]*Managed via GitHub Issues, Projects, and formal Revision Control[cite: 9, 11, 41].*
+*Managed via GitHub Issues, Projects, and formal Revision Control.*
 
-* **Revision Control**: We use a formal **Branching & Release strategy** (v1.0.0). [cite_start]Commit messages are linked to specific Issues[cite: 41].
-* [cite_start]**Labor Division [cite: 10, 23, 65]**:
-    * **Member 1 (PM)**: Project planning, Issue tracking, Release management.
-    * **Member 2 (DSP Lead)**: Filtering algorithms and peak detection logic.
-    * **Member 3 (Hardware Lead)**: Sensor integration and I2C protocol optimization.
-    * **Member 4 (Real-time Specialist)**: Callback handler and thread synchronization.
-    * **Member 5 (PR & Docs)**: Social media strategy and eye-catching presentation.
+* **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
+* **Labor Division**:
+  * **Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
+  * **Member 2 (DSP Lead)**: Signal filtering algorithms and peak detection logic.
+  * **Member 3 (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
+  * **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
+  * **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
 
 ## 📢 Social Media & Promotion
-[cite_start]*Creating a "buzz" around VibePulse to engage potential users[cite: 12, 14, 15].*
+*Creating a "buzz" around VibePulse to engage potential users.*
 
 <p align="center">
   <a href="https://www.instagram.com/vibepulse2026">
@@ -87,9 +87,15 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 </p>
 
 ## 🛠️ Installation & Build
-[cite_start]*Designed for reproducibility[cite: 13, 43].*
+*Designed for full reproducibility.*
 
 1. **Clone & Setup**
    ```bash
    git clone [https://github.com/Zonlywyh/ENG5220-VibePulse.git](https://github.com/Zonlywyh/ENG5220-VibePulse.git)
    cd ENG5220-VibePulse
+   mkdir build && cd build
+2. Build (CMake)
+    ```bash
+   mkdir build && cd build
+   cmake ..
+   make -j4 # Production build with unit tests
