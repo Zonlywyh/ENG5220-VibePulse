@@ -203,6 +203,18 @@ int main(int argc, char** argv) {
                         status_message += " | Music: " + name;
                     }
                 }
+
+                const int cz = zone_player->currentZone();
+                const int tz = zone_player->targetZone();
+                if (tz != cz) {
+                    if (auto tp = zone_player->targetTrackPath(); tp.has_value()) {
+                        namespace fs = std::filesystem;
+                        const std::string tname = fs::path(*tp).stem().string();
+                        if (!tname.empty()) {
+                            status_message += " -> " + tname;
+                        }
+                    }
+                }
             }
 #endif
 

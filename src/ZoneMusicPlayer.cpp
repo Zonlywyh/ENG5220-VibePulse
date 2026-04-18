@@ -8,6 +8,11 @@
 #include <chrono>
 #include <stdexcept>
 
+static long long steadyNowMs() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 ZoneMusicPlayer::ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend)
     : m_backend(std::move(backend))
 {
@@ -15,6 +20,9 @@ ZoneMusicPlayer::ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend)
         throw std::invalid_argument("ZoneMusicPlayer: backend must not be null");
     }
     m_handles.fill(-1);
+    const long long now = steadyNowMs();
+    m_desiredSinceMs.store(now);
+    m_lastSwitchMs.store(now);
 }
 
 ZoneMusicPlayer::~ZoneMusicPlayer() {
@@ -62,12 +70,20 @@ bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& 
         m_backend->setVolume(m_handles[i], (i == 0) ? 128 : 0);
     }
     m_currentZone.store(1);
+    m_targetZone.store(1);
     return true;
 }
 
 std::optional<std::string> ZoneMusicPlayer::currentTrackPath() const {
     if (!m_pathsLoaded.load()) return std::nullopt;
     const int zone = m_currentZone.load();
+    if (zone < 1 || zone > kZoneCount) return std::nullopt;
+    return m_zonePaths[zone - 1];
+}
+
+std::optional<std::string> ZoneMusicPlayer::targetTrackPath() const {
+    if (!m_pathsLoaded.load()) return std::nullopt;
+    const int zone = m_targetZone.load();
     if (zone < 1 || zone > kZoneCount) return std::nullopt;
     return m_zonePaths[zone - 1];
 }
@@ -80,16 +96,34 @@ int ZoneMusicPlayer::bpmToZone(int bpm) const {
     // zone4: 81..90
     // zone5: 91..100
     // zone6: >= 101
-    if (bpm <= 60) return 1;
-    if (bpm <= 70) return 2;
-    if (bpm <= 80) return 3;
-    if (bpm <= 90) return 4;
-    if (bpm <= 100) return 5;
+    if (bpm <= 76) return 1;
+    if (bpm <= 90) return 2;
+    if (bpm <= 110) return 3;
+    if (bpm <= 140) return 4;
+    if (bpm <= 150) return 5;
     return 6;
 }
 
 void ZoneMusicPlayer::updateBPM(int bpm) {
-    setZone(bpmToZone(bpm));
+    const int desired = bpmToZone(bpm);
+    const long long now = steadyNowMs();
+
+    // Track how long the desired zone has been stable.
+    const int lastDesired = m_lastDesiredZone.load();
+    if (desired != lastDesired) {
+        m_lastDesiredZone.store(desired);
+        m_desiredSinceMs.store(now);
+        return;
+    }
+
+    const int current = m_currentZone.load();
+    if (desired == current) return;
+
+    // Debounce + cooldown to avoid thrashing on noisy BPM boundaries.
+    if (now - m_desiredSinceMs.load() < kZoneStableMs) return;
+    if (now - m_lastSwitchMs.load() < kMinSwitchIntervalMs) return;
+
+    setZone(desired);
 }
 
 void ZoneMusicPlayer::setZone(int zone) {
@@ -99,6 +133,9 @@ void ZoneMusicPlayer::setZone(int zone) {
     const int current = m_currentZone.load();
     if (current == zone) return;
     if (!m_backend->isReady()) return;
+
+    m_targetZone.store(zone);
+    m_lastSwitchMs.store(steadyNowMs());
 
     // Interrupt any in-flight crossfade.
     m_stopRequested.store(true);
@@ -144,6 +181,7 @@ void ZoneMusicPlayer::runCrossfade(int fromZone, int toZone) {
     m_backend->setVolume(hOut, 0);
 
     m_currentZone.store(toZone);
+    m_targetZone.store(toZone);
     m_crossfading.store(false);
 
     if (m_onTransition) {
