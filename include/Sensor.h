@@ -1,3 +1,22 @@
+#ifndef MAX30102_SENSOR_H
+#define MAX30102_SENSOR_H
+
+#include <gpiod.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <deque>
+#include <fcntl.h>
+#include <functional>
+#include <linux/i2c-dev.h>
+#include <mutex>
+#include <string>
+#include <sys/eventfd.h>
+#include <sys/ioctl.h>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 /**
  * @file Sensor.h
  * @brief MAX30102 PPG sensor driver using libgpiod for event-driven DRDY handling.
@@ -81,6 +100,23 @@ enum LedPulseWidth {
     PULSEWIDTH_411 = 3
 };
 
+enum class SensorStatus {
+    UNINITIALIZED,
+    READY,
+    RUNNING,
+    ERROR
+};
+
+class Max30102Sensor {
+public:
+    using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
+enum LedPulseWidth {
+    PULSEWIDTH_69  = 0,
+    PULSEWIDTH_118 = 1,
+    PULSEWIDTH_215 = 2,
+    PULSEWIDTH_411 = 3
+};
+
 /**
  * @brief Current sensor operational status.
  */
@@ -100,6 +136,9 @@ public:
     void stop();
     void setDataCallback(DataCallback cb);
 
+    SensorStatus getStatus() const;
+    std::string getLastError() const;
+
     bool checkPartID();
     bool configureSensor(SampleAverage avg = SAMPLEAVG_4,
                          SampleRate rate = SAMPLERATE_100,
@@ -116,6 +155,27 @@ public:
      */
     std::string getLastError() const;
 
+private:
+    void dataWorker();
+    void readFifo();
+    void writeRegister(uint8_t reg, uint8_t value);
+    uint8_t readRegister(uint8_t reg);
+
+    void setStatus(SensorStatus s, const std::string& err = "");
+
+private:
+    int i2c_fd_ = -1;
+    int wake_fd_ = -1;
+    int interrupt_pin_;
+    mutable std::mutex mutex_;
+    std::atomic<bool> running_{false};
+
+    mutable std::mutex error_mutex_;
+    SensorStatus status_{SensorStatus::UNINITIALIZED};
+    std::string last_error_;
+
+    std::deque<Sample> sample_buffer_;
+    DataCallback data_callback_;
 private:
     void dataWorker();
     void readFifo();
