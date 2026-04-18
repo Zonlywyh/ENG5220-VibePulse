@@ -38,7 +38,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 ## 🧠 Real-Time Implementation & DSP
 *In accordance with ENG 5220 marking criteria, this project strictly avoids polling to ensure high responsiveness.*
 
-***Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
+* **Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
 **Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
 * **DSP Pipeline**:
     **High-Pass Filter**: DC removal to eliminate static tissue interference.
@@ -48,7 +48,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 ## 💻 Software Structure & Reliability
 *Our code is structured using Object-Oriented principles to guarantee high reliability and ease of maintenance.*
 
-***SOLID Principles**: The choice of classes is guided by SOLID principles to ensure clear encapsulation and rationale.
+* **SOLID Principles**: The choice of classes is guided by SOLID principles to ensure clear encapsulation and rationale.
 **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
 **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
@@ -63,11 +63,11 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 
 * **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
 * **Labor Division**:
-  ***Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
-  ***Member 2 (DSP Lead)**: Signal filtering algorithms and peak detection logic.
-  ***Member 3 (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
-  ***Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
-  ***Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
+  * **Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
+  * **Member 2 (DSP Lead)**: Signal filtering algorithms and peak detection logic.
+  * **Member 3 (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
+  * **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
+  * **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
 
 ## 📢 Social Media & Promotion
 *Creating a "buzz" around VibePulse to engage potential users.*
