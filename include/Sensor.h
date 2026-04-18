@@ -101,6 +101,11 @@ public:
     void setDataCallback(DataCallback cb);
 
     bool checkPartID();
+/**
+     * @brief Configure sensor parameters.
+     * @note The internal 10ms sleep after reset is required by MAX30102 datasheet
+     *       and occurs only during initialization.
+     */
     bool configureSensor(SampleAverage avg = SAMPLEAVG_4,
                          SampleRate rate = SAMPLERATE_100,
                          LedPulseWidth width = PULSEWIDTH_411);
