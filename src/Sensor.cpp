@@ -1,3 +1,12 @@
+/**
+ * @file Sensor.cpp
+ * @brief Implementation of MAX30102 PPG sensor driver.
+ *
+ * @note Adapted from:
+ *       - libgpiod official examples
+ *       - MAX30102 datasheet
+ *       - ENG5220 realtime requirements (blocking I/O + callback + thread)
+ */
 #include "../include/Sensor.h"
 
 #include <algorithm>
@@ -6,6 +15,7 @@
 #include <cstring>
 #include <iostream>
 #include <sys/epoll.h>
+#include <thread>
 
 Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate rate, LedPulseWidth width)
     : interrupt_pin_(interruptPin),
@@ -110,7 +120,7 @@ bool Max30102Sensor::initialize() {
         std::cerr << "Could not create eventfd for sensor worker shutdown." << std::endl;
         return false;
     }
-
+    setStatus(SensorStatus::READY);
     return true;
 }
 
@@ -162,6 +172,7 @@ void Max30102Sensor::start() {
     }
     running_ = true;
     reader_thread_ = std::thread(&Max30102Sensor::dataWorker, this);
+    setStatus(SensorStatus::RUNNING);
 }
 
 void Max30102Sensor::stop() {
@@ -175,6 +186,7 @@ void Max30102Sensor::stop() {
     if (reader_thread_.joinable()) {
         reader_thread_.join();
     }
+    setStatus(SensorStatus::READY);
 }
 
 void Max30102Sensor::setDataCallback(DataCallback cb) {
@@ -358,4 +370,20 @@ uint8_t Max30102Sensor::readRegister(uint8_t reg) {
     uint8_t value = 0;
     read(i2c_fd_, &value, 1);
     return value;
+}
+SensorStatus Max30102Sensor::getStatus() const {
+    return status_.load();
+}
+
+std::string Max30102Sensor::getLastError() const {
+    std::lock_guard<std::mutex> lock(error_mutex_);
+    return last_error_;
+}
+
+void Max30102Sensor::setStatus(SensorStatus s, const std::string& err) {
+    status_.store(s);
+    if (!err.empty()) {
+        std::lock_guard<std::mutex> lock(error_mutex_);
+        last_error_ = err;
+    }
 }
