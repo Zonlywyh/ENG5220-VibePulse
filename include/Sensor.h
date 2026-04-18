@@ -17,6 +17,33 @@
 #include <thread>
 #include <unistd.h>
 #include <vector>
+/**
+ * @file Sensor.h
+ * @brief MAX30102 PPG sensor driver using libgpiod for event-driven DRDY handling.
+ *
+ * @note Adapted from:
+ *       - libgpiod official examples
+ *       - MAX30102 datasheet
+ */
+
+#ifndef MAX30102_SENSOR_H
+#define MAX30102_SENSOR_H
+
+#include <gpiod.h>
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <deque>
+#include <fcntl.h>
+#include <functional>
+#include <linux/i2c-dev.h>
+#include <mutex>
+#include <sys/eventfd.h>
+#include <sys/ioctl.h>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 
 constexpr int DEFAULT_I2C_BUS = 1;
 constexpr uint8_t DEFAULT_MAX30102_ADDRESS = 0x57;
@@ -83,6 +110,20 @@ enum class SensorStatus {
 class Max30102Sensor {
 public:
     using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
+enum LedPulseWidth {
+    PULSEWIDTH_69  = 0,
+    PULSEWIDTH_118 = 1,
+    PULSEWIDTH_215 = 2,
+    PULSEWIDTH_411 = 3
+};
+
+/**
+ * @brief Current sensor operational status.
+ */
+
+class Max30102Sensor {
+public:
+    using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
 
     Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO,
                    SampleAverage avg = SAMPLEAVG_4,
@@ -104,6 +145,15 @@ public:
                          LedPulseWidth width = PULSEWIDTH_411);
 
     std::vector<Sample> getLatestSamples(size_t maxCount = 100) const;
+/**
+     * @brief Get current sensor status (thread-safe, lock-free).
+     */
+    SensorStatus getStatus() const;
+
+    /**
+     * @brief Get last error message if any.
+     */
+    std::string getLastError() const;
 
 private:
     void dataWorker();
@@ -123,6 +173,26 @@ private:
     mutable std::mutex error_mutex_;
     SensorStatus status_{SensorStatus::UNINITIALIZED};
     std::string last_error_;
+
+    std::deque<Sample> sample_buffer_;
+    DataCallback data_callback_;
+private:
+    void dataWorker();
+    void readFifo();
+    void writeRegister(uint8_t reg, uint8_t value);
+    uint8_t readRegister(uint8_t reg);
+/**
+     * @brief Internal helper to update status (called from various places).
+     */
+    void setStatus(SensorStatus s, const std::string& err = "");
+
+
+private:
+    int i2c_fd_ = -1;
+    int wake_fd_ = -1;
+    int interrupt_pin_;
+    mutable std::mutex mutex_;
+    std::atomic<bool> running_{false};
 
     std::deque<Sample> sample_buffer_;
     DataCallback data_callback_;
