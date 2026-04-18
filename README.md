@@ -39,18 +39,18 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 *In accordance with ENG 5220 marking criteria, this project strictly avoids polling to ensure high responsiveness.*
 
 * **Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
-**Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
+* **Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
 * **DSP Pipeline**:
-    **High-Pass Filter**: DC removal to eliminate static tissue interference.
-    **Low-Pass Filter**: Removes high-frequency electrical artifacts.
-    **Quantitative Assessment**: Latencies are monitored to ensure data acquisition and music adaptation happen within defined tolerances.
+    * **High-Pass Filter**: DC removal to eliminate static tissue interference.
+    * **Low-Pass Filter**: Removes high-frequency electrical artifacts.
+    * **Quantitative Assessment**: Latencies are monitored to ensure data acquisition and music adaptation happen within defined tolerances.
 
 ## 💻 Software Structure & Reliability
 *Our code is structured using Object-Oriented principles to guarantee high reliability and ease of maintenance.*
 
 * **SOLID Principles**: The choice of classes is guided by SOLID principles to ensure clear encapsulation and rationale.
-**Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
-**Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
+* **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
+* **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
 ## 📌 Key Features
 - 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
