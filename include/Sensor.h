@@ -1,3 +1,12 @@
+/**
+ * @file Sensor.h
+ * @brief MAX30102 PPG sensor driver using libgpiod for event-driven DRDY handling.
+ *
+ * @note Adapted from:
+ *       - libgpiod official examples
+ *       - MAX30102 datasheet
+ */
+
 #ifndef MAX30102_SENSOR_H
 #define MAX30102_SENSOR_H
 
@@ -72,6 +81,10 @@ enum LedPulseWidth {
     PULSEWIDTH_411 = 3
 };
 
+/**
+ * @brief Current sensor operational status.
+ */
+
 class Max30102Sensor {
 public:
     using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
@@ -93,12 +106,26 @@ public:
                          LedPulseWidth width = PULSEWIDTH_411);
 
     std::vector<Sample> getLatestSamples(size_t maxCount = 100) const;
+/**
+     * @brief Get current sensor status (thread-safe, lock-free).
+     */
+    SensorStatus getStatus() const;
+
+    /**
+     * @brief Get last error message if any.
+     */
+    std::string getLastError() const;
 
 private:
     void dataWorker();
     void readFifo();
     void writeRegister(uint8_t reg, uint8_t value);
     uint8_t readRegister(uint8_t reg);
+/**
+     * @brief Internal helper to update status (called from various places).
+     */
+    void setStatus(SensorStatus s, const std::string& err = "");
+
 
 private:
     int i2c_fd_ = -1;
