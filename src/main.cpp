@@ -1,6 +1,6 @@
 #include "../include/HeartRateCalculator.h"
 #include "../include/sensor.h"
-#include "../include/MusicPlayer.h"
+#include "../include/ZoneMusicPlayer.h"
 #include "../include/SDL2AudioBackend.h"
 
 #include <iostream>
@@ -76,29 +76,28 @@ int main() {
             hr.processSamples(samples);
         });
 
-        // ── MusicPlayer 初始化 ────────────────────────────────
+        // ── ZoneMusicPlayer 初始化 ────────────────────────────
         auto backend = std::make_shared<SDL2AudioBackend>();
-        MusicPlayer player(backend);
+        ZoneMusicPlayer player(backend);
 
-        player.loadZone(MusicZone::ZONE_1, getZoneTracks(1));
-        player.loadZone(MusicZone::ZONE_2, getZoneTracks(2));
-        player.loadZone(MusicZone::ZONE_3, getZoneTracks(3));
-        player.loadZone(MusicZone::ZONE_4, getZoneTracks(4));
-        player.loadZone(MusicZone::ZONE_5, getZoneTracks(5));
-        player.loadZone(MusicZone::ZONE_6, getZoneTracks(6));
+        player.loadZone(1, getZoneTracks(1));
+        player.loadZone(2, getZoneTracks(2));
+        player.loadZone(3, getZoneTracks(3));
+        player.loadZone(4, getZoneTracks(4));
+        player.loadZone(5, getZoneTracks(5));
+        player.loadZone(6, getZoneTracks(6));
 
         // 区间切换时打印日志
-        player.setTransitionCallback([](MusicZone zone) {
+        player.setTransitionCallback([](int zone) {
             const char* names[] = {
-                "Zone1 (60-79 BPM)",
+                "Zone1 (< 80 BPM)",
                 "Zone2 (80-99 BPM)",
                 "Zone3 (100-119 BPM)",
                 "Zone4 (120-139 BPM)",
                 "Zone5 (140-159 BPM)",
-                "Zone6 (160-180 BPM)"
+                "Zone6 (>= 160 BPM)"
             };
-            std::cout << "[MUSIC] --> "
-                      << names[static_cast<int>(zone)] << std::endl;
+            std::cout << "[MUSIC] --> " << names[zone - 1] << std::endl;
         });
 
         sensor.start();
@@ -114,10 +113,9 @@ int main() {
             } else if (bpm.has_value()) {
                 int bpmInt = static_cast<int>(*bpm);
                 std::cout << "[INFO] Heart Rate: " << bpmInt << " BPM"
-                          << " | Zone: " << (static_cast<int>(bpmToZone(bpmInt)) + 1)
+                          << " | Zone: " << bpmToZone(bpmInt)
                           << std::endl;
 
-                // ── 关键对接点 ────────────────────────────────
                 player.updateBPM(bpmInt);
             } else {
                 std::cout << "[INFO] Measuring..." << std::endl;

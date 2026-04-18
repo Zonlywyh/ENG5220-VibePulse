@@ -6,8 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ── Core library (no SDL2 dep, used by both main and tests) ───
 add_library(music_player_core STATIC
-    src/MusicPlayer.cpp
-    
+    src/ZoneMusicPlayer.cpp
 )
 target_include_directories(music_player_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 

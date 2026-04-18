@@ -2,162 +2,176 @@
 //  ZoneMusicPlayer.cpp — VibePulse ENG5220
 // ============================================================
 
-#include "../include/ZoneMusicPlayer.h"
-
-#include <algorithm>
-#include <chrono>
+#include "ZoneMusicPlayer.h"
 #include <stdexcept>
+#include <chrono>
+#include <algorithm>
 
 ZoneMusicPlayer::ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend)
     : m_backend(std::move(backend))
 {
-    if (!m_backend) {
+    if (!m_backend)
         throw std::invalid_argument("ZoneMusicPlayer: backend must not be null");
-    }
-    m_handles.fill(-1);
+    m_monitor = std::thread(&ZoneMusicPlayer::monitorLoop, this);
 }
 
 ZoneMusicPlayer::~ZoneMusicPlayer() {
+    m_monitorStop.store(true);
+    if (m_monitor.joinable())
+        m_monitor.join();
+
     stopWorker();
-    freeTracks();
+
+    for (auto& handles : m_zoneHandles)
+        for (int h : handles)
+            m_backend->freeTrack(h);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Load
+// ─────────────────────────────────────────────────────────────
+bool ZoneMusicPlayer::loadZone(int zone, const std::vector<std::string>& paths) {
+    if (zone < 1 || zone > ZONE_COUNT) return false;
+    auto& handles = m_zoneHandles[zone - 1];
+    for (const auto& p : paths) {
+        int h = m_backend->loadTrack(p);
+        if (h < 0) return false;
+        handles.push_back(h);
+    }
+    // Auto-start zone 1's first track (play once; monitor will auto-advance)
+    if (zone == 1 && m_currentHandle < 0 && !handles.empty()) {
+        m_currentHandle = handles[0];
+        m_backend->play(m_currentHandle, 0);
+        m_backend->setVolume(m_currentHandle, 128);
+        m_volIn.store(128);
+    }
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  BPM → zone
+// ─────────────────────────────────────────────────────────────
+void ZoneMusicPlayer::updateBPM(int bpm) {
+    int target = bpmToZone(bpm);
+    if (target != m_currentZone.load())
+        setZone(target);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Pick random track (avoid repeating current)
+// ─────────────────────────────────────────────────────────────
+int ZoneMusicPlayer::pickRandomExcept(int zone, int excludeHandle) {
+    if (zone < 1 || zone > ZONE_COUNT) return -1;
+    auto& handles = m_zoneHandles[zone - 1];
+    if (handles.empty()) return -1;
+    if (handles.size() == 1) return handles[0];
+
+    int picked = excludeHandle;
+    int attempts = 0;
+    while (picked == excludeHandle && attempts < 10) {
+        std::uniform_int_distribution<int> dist(0, static_cast<int>(handles.size()) - 1);
+        picked = handles[dist(m_rng)];
+        ++attempts;
+    }
+    return picked;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Background monitor — detects track end and auto-advances
+// ─────────────────────────────────────────────────────────────
+void ZoneMusicPlayer::monitorLoop() {
+    while (!m_monitorStop.load()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (m_crossfading.load()) continue;
+
+        int handle = m_currentHandle;
+        if (handle < 0) continue;
+
+        if (m_backend->isFinished(handle)) {
+            int zone = m_currentZone.load();
+            int nextHandle = pickRandomExcept(zone, handle);
+            if (nextHandle < 0) continue;
+
+            m_backend->halt(handle);
+            m_currentHandle = nextHandle;
+            m_backend->play(nextHandle, 0);
+            m_backend->setVolume(nextHandle, 128);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Zone switch with crossfade
+// ─────────────────────────────────────────────────────────────
+void ZoneMusicPlayer::setZone(int zone) {
+    zone = std::clamp(zone, 1, ZONE_COUNT);
+    if (m_currentZone.load() == zone) return;
+    if (!m_backend->isReady()) return;
+
+    int hIn = pickRandomExcept(zone, m_currentHandle);
+    if (hIn < 0) return;
+
+    stopWorker();
+    m_stopRequested.store(false);
+    m_crossfading.store(true);
+
+    int hOut = m_currentHandle;
+    m_currentHandle = hIn;
+
+    m_backend->play(hIn, 0);
+    m_backend->setVolume(hIn, 0);
+
+    m_worker = std::thread([this, hOut, hIn, zone]() {
+        runCrossfade(hOut, hIn, zone);
+    });
+    m_worker.detach();
 }
 
 void ZoneMusicPlayer::stopWorker() {
     m_stopRequested.store(true);
-    m_cv.notify_all();  // wake crossfade worker immediately, no need to wait sleep
-    if (m_worker.joinable()) {
+    m_cv.notify_all();
+    if (m_worker.joinable())
         m_worker.join();
-    }
     m_crossfading.store(false);
 }
 
-void ZoneMusicPlayer::freeTracks() {
-    for (int& h : m_handles) {
-        if (h >= 0) {
-            m_backend->freeTrack(h);
-            h = -1;
-        }
-    }
-    m_pathsLoaded.store(false);
-}
-
-bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& zonePaths) {
-    stopWorker();
-    freeTracks();
-
-    // Load all tracks first.
-    for (int i = 0; i < kZoneCount; ++i) {
-        m_zonePaths[i] = zonePaths[i];
-        m_handles[i] = m_backend->loadTrack(zonePaths[i]);
-        if (m_handles[i] < 0) {
-            // Best-effort cleanup if any load fails.
-            freeTracks();
-            return false;
-        }
-    }
-    m_pathsLoaded.store(true);
-
-    // Start all tracks looping, but only zone1 audible initially.
-    for (int i = 0; i < kZoneCount; ++i) {
-        m_backend->play(m_handles[i], -1);
-        m_backend->setVolume(m_handles[i], (i == 0) ? 128 : 0);
-    }
-    m_currentZone.store(1);
-    return true;
-}
-
-std::optional<std::string> ZoneMusicPlayer::currentTrackPath() const {
-    if (!m_pathsLoaded.load()) return std::nullopt;
-    const int zone = m_currentZone.load();
-    if (zone < 1 || zone > kZoneCount) return std::nullopt;
-    return m_zonePaths[zone - 1];
-}
-
-int ZoneMusicPlayer::bpmToZone(int bpm) const {
-    // Simple 6-zone mapping. Adjust as needed for your project definition.
-    // zone1: <= 60
-    // zone2: 61..70
-    // zone3: 71..80
-    // zone4: 81..90
-    // zone5: 91..100
-    // zone6: >= 101
-    if (bpm <= 60) return 1;
-    if (bpm <= 70) return 2;
-    if (bpm <= 80) return 3;
-    if (bpm <= 90) return 4;
-    if (bpm <= 100) return 5;
-    return 6;
-}
-
-void ZoneMusicPlayer::updateBPM(int bpm) {
-    setZone(bpmToZone(bpm));
-}
-
-void ZoneMusicPlayer::setZone(int zone) {
-    if (zone < 1) zone = 1;
-    if (zone > kZoneCount) zone = kZoneCount;
-
-    const int current = m_currentZone.load();
-    if (current == zone) return;
-    if (!m_backend->isReady()) return;
-
-    // Interrupt any in-flight crossfade.
-    m_stopRequested.store(true);
-    if (m_worker.joinable()) {
-        m_worker.join();
-    }
-
-    m_stopRequested.store(false);
-    m_crossfading.store(true);
-
-    m_worker = std::thread([this, current, zone]() {
-        runCrossfade(current, zone);
-    });
-}
-
-void ZoneMusicPlayer::runCrossfade(int fromZone, int toZone) {
-    const int fromIdx = std::clamp(fromZone, 1, kZoneCount) - 1;
-    const int toIdx   = std::clamp(toZone,   1, kZoneCount) - 1;
-
-    const int hOut = m_handles[fromIdx];
-    const int hIn  = m_handles[toIdx];
-    if (hOut < 0 || hIn < 0) {
-        m_crossfading.store(false);
-        return;
-    }
-
+// ─────────────────────────────────────────────────────────────
+//  Crossfade worker
+// ─────────────────────────────────────────────────────────────
+void ZoneMusicPlayer::runCrossfade(int hOut, int hIn, int next) {
     for (int step = 1; step <= CROSSFADE_STEPS; ++step) {
         if (m_stopRequested.load()) {
             m_crossfading.store(false);
             return;
         }
+        int volIn  = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
+        int volOut = 128 - volIn;
 
-        const int volIn  = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
-        const int volOut = 128 - volIn;
+        if (hIn  >= 0) m_backend->setVolume(hIn,  volIn);
+        if (hOut >= 0) m_backend->setVolume(hOut, volOut);
 
-        m_backend->setVolume(hIn, volIn);
-        m_backend->setVolume(hOut, volOut);
+        m_volIn.store(volIn);
+        m_volOut.store(volOut);
 
-        // Wait for CROSSFADE_STEP_MS, but wake immediately if stop is requested.
-        // This replaces sleep_for() so a new BPM update can interrupt the crossfade
-        // in < 1ms instead of waiting up to 50ms for the sleep to expire.
         {
             std::unique_lock<std::mutex> lk(m_cv_mutex);
-            m_cv.wait_for(lk,
-                          std::chrono::milliseconds(CROSSFADE_STEP_MS),
+            m_cv.wait_for(lk, std::chrono::milliseconds(CROSSFADE_STEP_MS),
                           [this] { return m_stopRequested.load(); });
         }
     }
 
-    m_backend->setVolume(hIn, 128);
-    m_backend->setVolume(hOut, 0);
+    if (hIn  >= 0) m_backend->setVolume(hIn,  128);
+    if (hOut >= 0) {
+        m_backend->setVolume(hOut, 0);
+        m_backend->halt(hOut);
+    }
 
-    m_currentZone.store(toZone);
+    m_volIn.store(128);
+    m_volOut.store(0);
+    m_currentZone.store(next);
     m_crossfading.store(false);
 
-    if (m_onTransition) {
-        m_onTransition(toZone);
-    }
+    if (m_onTransition) m_onTransition(next);
 }
 
 void ZoneMusicPlayer::setTransitionCallback(std::function<void(int)> cb) {

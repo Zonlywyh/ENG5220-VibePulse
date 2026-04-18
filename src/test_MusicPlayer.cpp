@@ -3,7 +3,7 @@
 //  Google Test unit tests. Zero hardware dependency.
 // ============================================================
 
-#include "MusicPlayer.h"
+#include "ZoneMusicPlayer.h"
 #include <gtest/gtest.h>
 #include <chrono>
 #include <thread>
@@ -52,18 +52,18 @@ struct MockBackend : public IAudioBackend {
 // ─────────────────────────────────────────────────────────────
 class MusicPlayerTest : public ::testing::Test {
 protected:
-    std::shared_ptr<MockBackend> mock;
-    std::unique_ptr<MusicPlayer> player;
+    std::shared_ptr<MockBackend>    mock;
+    std::unique_ptr<ZoneMusicPlayer> player;
 
     void SetUp() override {
         mock   = std::make_shared<MockBackend>();
-        player = std::make_unique<MusicPlayer>(mock);
-        player->loadZone(MusicZone::ZONE_1, {"z1a.wav", "z1b.wav"});
-        player->loadZone(MusicZone::ZONE_2, {"z2a.wav", "z2b.wav"});
-        player->loadZone(MusicZone::ZONE_3, {"z3a.wav", "z3b.wav"});
-        player->loadZone(MusicZone::ZONE_4, {"z4a.wav", "z4b.wav"});
-        player->loadZone(MusicZone::ZONE_5, {"z5a.wav", "z5b.wav"});
-        player->loadZone(MusicZone::ZONE_6, {"z6a.wav", "z6b.wav"});
+        player = std::make_unique<ZoneMusicPlayer>(mock);
+        player->loadZone(1, {"z1a.wav", "z1b.wav"});
+        player->loadZone(2, {"z2a.wav", "z2b.wav"});
+        player->loadZone(3, {"z3a.wav", "z3b.wav"});
+        player->loadZone(4, {"z4a.wav", "z4b.wav"});
+        player->loadZone(5, {"z5a.wav", "z5b.wav"});
+        player->loadZone(6, {"z6a.wav", "z6b.wav"});
     }
 
     void waitForCrossfade(int timeoutMs = 3000) {
@@ -77,7 +77,7 @@ protected:
 
 // ── T-01  Null backend throws ─────────────────────────────────
 TEST(Construction, ThrowsOnNullBackend) {
-    EXPECT_THROW(MusicPlayer(nullptr), std::invalid_argument);
+    EXPECT_THROW(ZoneMusicPlayer(nullptr), std::invalid_argument);
 }
 
 // ── T-02  All tracks loaded ───────────────────────────────────
@@ -89,36 +89,36 @@ TEST_F(MusicPlayerTest, LoadZoneLoadsAllTracks) {
 TEST(MusicPlayerLoad, ReturnsFalseOnBackendFailure) {
     auto m = std::make_shared<MockBackend>();
     m->loadFails = 1;
-    MusicPlayer p(m);
-    EXPECT_FALSE(p.loadZone(MusicZone::ZONE_1, {"a.wav", "b.wav"}));
+    ZoneMusicPlayer p(m);
+    EXPECT_FALSE(p.loadZone(1, {"a.wav", "b.wav"}));
 }
 
-// ── T-04  Initial zone is ZONE_1 ──────────────────────────────
+// ── T-04  Initial zone is 1 ───────────────────────────────────
 TEST_F(MusicPlayerTest, InitialZoneIsZone1) {
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+    EXPECT_EQ(player->currentZone(), 1);
 }
 
 // ── T-05  BPM boundary mapping ────────────────────────────────
 TEST(BpmMapping, AllZoneBoundaries) {
-    EXPECT_EQ(bpmToZone(60),  MusicZone::ZONE_1);
-    EXPECT_EQ(bpmToZone(79),  MusicZone::ZONE_1);
-    EXPECT_EQ(bpmToZone(80),  MusicZone::ZONE_2);
-    EXPECT_EQ(bpmToZone(99),  MusicZone::ZONE_2);
-    EXPECT_EQ(bpmToZone(100), MusicZone::ZONE_3);
-    EXPECT_EQ(bpmToZone(119), MusicZone::ZONE_3);
-    EXPECT_EQ(bpmToZone(120), MusicZone::ZONE_4);
-    EXPECT_EQ(bpmToZone(139), MusicZone::ZONE_4);
-    EXPECT_EQ(bpmToZone(140), MusicZone::ZONE_5);
-    EXPECT_EQ(bpmToZone(159), MusicZone::ZONE_5);
-    EXPECT_EQ(bpmToZone(160), MusicZone::ZONE_6);
-    EXPECT_EQ(bpmToZone(180), MusicZone::ZONE_6);
+    EXPECT_EQ(bpmToZone(60),  1);
+    EXPECT_EQ(bpmToZone(79),  1);
+    EXPECT_EQ(bpmToZone(80),  2);
+    EXPECT_EQ(bpmToZone(99),  2);
+    EXPECT_EQ(bpmToZone(100), 3);
+    EXPECT_EQ(bpmToZone(119), 3);
+    EXPECT_EQ(bpmToZone(120), 4);
+    EXPECT_EQ(bpmToZone(139), 4);
+    EXPECT_EQ(bpmToZone(140), 5);
+    EXPECT_EQ(bpmToZone(159), 5);
+    EXPECT_EQ(bpmToZone(160), 6);
+    EXPECT_EQ(bpmToZone(180), 6);
 }
 
 // ── T-06  Same BPM zone, no crossfade ────────────────────────
 TEST_F(MusicPlayerTest, BPM65StaysInZone1) {
     player->updateBPM(65);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+    EXPECT_EQ(player->currentZone(), 1);
     EXPECT_FALSE(player->isCrossfading());
 }
 
@@ -126,21 +126,21 @@ TEST_F(MusicPlayerTest, BPM65StaysInZone1) {
 TEST_F(MusicPlayerTest, BPM85TransitionsToZone2) {
     player->updateBPM(85);
     waitForCrossfade();
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_2);
+    EXPECT_EQ(player->currentZone(), 2);
 }
 
 // ── T-08  BPM 170 → Zone 6 ───────────────────────────────────
 TEST_F(MusicPlayerTest, BPM170TransitionsToZone6) {
     player->updateBPM(170);
     waitForCrossfade();
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_6);
+    EXPECT_EQ(player->currentZone(), 6);
 }
 
 // ── T-09  Zone 6 → Zone 1 ────────────────────────────────────
 TEST_F(MusicPlayerTest, BPMDropFromZone6ToZone1) {
     player->updateBPM(170); waitForCrossfade();
     player->updateBPM(65);  waitForCrossfade();
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+    EXPECT_EQ(player->currentZone(), 1);
 }
 
 // ── T-10  Volumes correct after crossfade ────────────────────
@@ -153,24 +153,24 @@ TEST_F(MusicPlayerTest, VolumesCorrectAfterCrossfade) {
 
 // ── T-11  Not crossfading after transition ───────────────────
 TEST_F(MusicPlayerTest, NotCrossfadingAfterTransition) {
-    player->crossfadeTo(MusicZone::ZONE_3);
+    player->setZone(3);
     waitForCrossfade();
     EXPECT_FALSE(player->isCrossfading());
 }
 
 // ── T-12  Callback fires on zone transition ──────────────────
 TEST_F(MusicPlayerTest, TransitionCallbackFires) {
-    MusicZone reported = MusicZone::ZONE_1;
-    player->setTransitionCallback([&](MusicZone z){ reported = z; });
+    int reported = 0;
+    player->setTransitionCallback([&](int z){ reported = z; });
     player->updateBPM(85);
     waitForCrossfade();
-    EXPECT_EQ(reported, MusicZone::ZONE_2);
+    EXPECT_EQ(reported, 2);
 }
 
-// ── T-13  Same zone crossfade is no-op ───────────────────────
-TEST_F(MusicPlayerTest, CrossfadeToSameZoneIsNoop) {
+// ── T-13  Same zone setZone is no-op ─────────────────────────
+TEST_F(MusicPlayerTest, SetZoneToSameZoneIsNoop) {
     size_t before = mock->log.size();
-    player->crossfadeTo(MusicZone::ZONE_1);
+    player->setZone(1);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(mock->log.size(), before);
 }
@@ -178,28 +178,25 @@ TEST_F(MusicPlayerTest, CrossfadeToSameZoneIsNoop) {
 // ── T-14  No-op when backend not ready ───────────────────────
 TEST_F(MusicPlayerTest, CrossfadeNoopWhenBackendNotReady) {
     mock->ready = false;
-    player->crossfadeTo(MusicZone::ZONE_2);
+    player->setZone(2);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+    EXPECT_EQ(player->currentZone(), 1);
 }
 
 // ── T-15  Auto-advance when track finishes ───────────────────
 TEST_F(MusicPlayerTest, AutoAdvancesWhenTrackFinishes) {
-    // Zone 1 starts with track 0, simulate it finishing
+    // Zone 1 starts with track 0; simulate it finishing
     int playsBefore = mock->countCalls("play");
-    mock->finishedHandle.store(0);  // track 0 = first zone1 track
+    mock->finishedHandle.store(0);
 
-    // Wait for monitor thread to detect and switch (max 1s)
     auto deadline = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(1000);
     while (mock->countCalls("play") == playsBefore &&
            std::chrono::steady_clock::now() < deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    // A new play call should have been made
     EXPECT_GT(mock->countCalls("play"), playsBefore);
-    // Zone should remain the same
-    EXPECT_EQ(player->currentZone(), MusicZone::ZONE_1);
+    EXPECT_EQ(player->currentZone(), 1);
 }
 
 // ── T-16  Rapid BPM updates stable ───────────────────────────
@@ -210,6 +207,6 @@ TEST_F(MusicPlayerTest, RapidBPMUpdatesStable) {
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
     waitForCrossfade(5000);
-    auto z = player->currentZone();
-    EXPECT_TRUE(z >= MusicZone::ZONE_1 && z <= MusicZone::ZONE_6);
+    int z = player->currentZone();
+    EXPECT_TRUE(z >= 1 && z <= 6);
 }
