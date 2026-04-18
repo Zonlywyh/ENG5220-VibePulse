@@ -96,11 +96,11 @@ int ZoneMusicPlayer::bpmToZone(int bpm) const {
     // zone4: 81..90
     // zone5: 91..100
     // zone6: >= 101
-    if (bpm <= 60) return 1;
-    if (bpm <= 70) return 2;
-    if (bpm <= 80) return 3;
-    if (bpm <= 90) return 4;
-    if (bpm <= 100) return 5;
+    if (bpm <= 76) return 1;
+    if (bpm <= 90) return 2;
+    if (bpm <= 110) return 3;
+    if (bpm <= 140) return 4;
+    if (bpm <= 150) return 5;
     return 6;
 }
 
