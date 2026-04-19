@@ -9,6 +9,9 @@
  */
 #include "../include/Sensor.h"
 #include <unistd.h>
+#include <fcntl.h>          
+#include <linux/i2c-dev.h>  
+#include <sys/eventfd.h>    
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
