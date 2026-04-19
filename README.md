@@ -71,7 +71,6 @@ Based on our verified hardware design, connect the components as follows:
 | **GND** | Pin 6 (Ground) | Common Ground |
 | **SCL** | Pin 5 (GPIO 3 / SCL) | I2C Clock Line |
 | **SDA** | Pin 3 (GPIO 2 / SDA) | I2C Data Line |
-| **INT** | Pin 7 (GPIO 4) | Hardware Interrupt (Optional) |
 
 ### 3. Hardware Rationale
 * **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
