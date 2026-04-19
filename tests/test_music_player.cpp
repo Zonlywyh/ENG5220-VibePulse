@@ -130,4 +130,3 @@ int main() {
     std::cerr << "[FAIL] " << g_failures << " test(s) failed" << std::endl;
     return 1;
 }
-
