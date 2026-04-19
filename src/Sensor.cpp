@@ -8,7 +8,7 @@
  *       - ENG5220 realtime requirements (blocking I/O + callback + thread)
  */
 #include "../include/Sensor.h"
-
+#include <unistd.h>
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
