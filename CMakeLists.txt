@@ -15,7 +15,11 @@ find_package(SDL2       QUIET)
 find_package(SDL2_mixer QUIET)
 
 if(SDL2_FOUND AND SDL2_mixer_FOUND)
-    add_executable(vibepulse src/main.cpp src/Sensor.cpp)
+    add_executable(vibepulse
+        src/main.cpp
+        src/Sensor.cpp
+        src/HeartRateCalculator.cpp
+    )
     target_include_directories(vibepulse PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_link_libraries(vibepulse PRIVATE
         music_player_core
