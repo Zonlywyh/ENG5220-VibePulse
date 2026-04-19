@@ -53,9 +53,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 * **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
 * **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
-### . Hardware Rationale
-* **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
-* **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
+
 ## 🔌 Hardware Configuration & Reproducibility
 *To ensure project reproducibility, the hardware setup follows the professional schematic below.*
 
