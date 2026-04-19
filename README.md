@@ -81,9 +81,6 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
     <img src="https://upload.wikimedia.org/wikipedia/commons/a/a4/Xiaohongshu_logo%26slogan.png" width="130" height="45" alt="Xiaohongshu">
   </a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://www.douyin.com/">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/a/a6/Tiktok_icon.svg" width="52" height="52" alt="Douyin">
-  </a>
 </p>
 
 ## 🛠️ Installation & Build
