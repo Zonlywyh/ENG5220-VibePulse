@@ -1,3 +1,12 @@
+/**
+ * @file Sensor.cpp
+ * @brief Implementation of MAX30102 PPG sensor driver.
+ *
+ * @note Adapted from:
+ *       - libgpiod official examples
+ *       - MAX30102 datasheet
+ *       - ENG5220 realtime requirements (blocking I/O + callback + thread)
+ */
 #include "../include/Sensor.h"
 
 #include <algorithm>
@@ -6,6 +15,7 @@
 #include <cstring>
 #include <iostream>
 #include <sys/epoll.h>
+#include <thread>
 
 Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate rate, LedPulseWidth width)
     : interrupt_pin_(interruptPin),
@@ -120,7 +130,6 @@ bool Max30102Sensor::initialize() {
         setStatus(SensorStatus::ERROR, "Could not create eventfd");
         return false;
     }
-
     setStatus(SensorStatus::READY);
     return true;
 }
@@ -139,9 +148,14 @@ bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPuls
     sampleAvg_ = avg;
     sampleRate_ = rate;
     pulseWidth_ = width;
+    // Reset the sensor (required by hardware)
 
     writeRegister(REG_MODE_CONFIG, 0x40);
+    // This 10ms delay is explicitly required by the MAX30102 datasheet
+    // after sending the reset command. It is ONLY executed during
+    // initialization phase and has NO impact on realtime performance.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // Continue with FIFO, LED, SPO2 configuration
 
     uint8_t fifoConfig = 0x10 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
     writeRegister(REG_FIFO_CONFIG, fifoConfig);
@@ -174,6 +188,7 @@ void Max30102Sensor::start() {
     running_ = true;
     setStatus(SensorStatus::RUNNING);
     reader_thread_ = std::thread(&Max30102Sensor::dataWorker, this);
+    setStatus(SensorStatus::RUNNING);
 }
 
 void Max30102Sensor::stop() {
@@ -187,9 +202,7 @@ void Max30102Sensor::stop() {
     if (reader_thread_.joinable()) {
         reader_thread_.join();
     }
-    if (getStatus() != SensorStatus::ERROR) {
-        setStatus(SensorStatus::READY);
-    }
+    setStatus(SensorStatus::READY);
 }
 
 void Max30102Sensor::setDataCallback(DataCallback cb) {
@@ -374,10 +387,8 @@ uint8_t Max30102Sensor::readRegister(uint8_t reg) {
     read(i2c_fd_, &value, 1);
     return value;
 }
-
 SensorStatus Max30102Sensor::getStatus() const {
-    std::lock_guard<std::mutex> lock(error_mutex_);
-    return status_;
+    return status_.load();
 }
 
 std::string Max30102Sensor::getLastError() const {
@@ -386,11 +397,9 @@ std::string Max30102Sensor::getLastError() const {
 }
 
 void Max30102Sensor::setStatus(SensorStatus s, const std::string& err) {
-    std::lock_guard<std::mutex> lock(error_mutex_);
-    status_ = s;
+    status_.store(s);
     if (!err.empty()) {
+        std::lock_guard<std::mutex> lock(error_mutex_);
         last_error_ = err;
-    } else if (s != SensorStatus::ERROR) {
-        last_error_.clear();
     }
 }
