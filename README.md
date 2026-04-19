@@ -78,7 +78,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
   </a>
   &nbsp;&nbsp;&nbsp;
   <a href="https://www.xiaohongshu.com/user/profile/69b1397500000000260387c5?xsec_token=YBxtCBhFe_EIjolON7N7ASj-vD2e1RUSR1M5LJVf8gmdw=&xsec_source=app_share&xhsshare=WeixinSession&appuid=69b1397500000000260387c5&apptime=1776592401&share_id=19154fd6ae34434881854bf62f2b4690">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/0/09/YouTube_full-color_icon_%282017%29.svg" width="72" height="52" alt="YouTube">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/a/a4/Xiaohongshu_logo%26slogan.png" width="130" height="45" alt="Xiaohongshu">
   </a>
   &nbsp;&nbsp;&nbsp;
   <a href="https://www.douyin.com/">
