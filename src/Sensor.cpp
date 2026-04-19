@@ -21,6 +21,10 @@
 #include <sys/epoll.h>
 #include <thread>
 
+/**
+ * @brief Constructor. Sets default sensor parameters.
+ */
+
 Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate rate, LedPulseWidth width)
     : interrupt_pin_(interruptPin),
       sampleAvg_(avg),
@@ -28,6 +32,10 @@ Max30102Sensor::Max30102Sensor(int interruptPin, SampleAverage avg, SampleRate r
       pulseWidth_(width)
 {
 }
+
+/**
+ * @brief Destructor. Releases all resources (gpiod, I2C, eventfd, thread).
+ */
 
 Max30102Sensor::~Max30102Sensor()
 {
@@ -57,6 +65,11 @@ Max30102Sensor::~Max30102Sensor()
         wake_fd_ = -1;
     }
 }
+
+/**
+ * @brief Initialize I2C bus, GPIO DRDY line, and sensor registers.
+ * @return true if initialization succeeded.
+ */
 
 bool Max30102Sensor::initialize()
 {
@@ -154,6 +167,11 @@ bool Max30102Sensor::initialize()
     return true;
 }
 
+/**
+ * @brief Check sensor Part ID (must be 0x15 for MAX30102).
+ * @return true if correct chip is detected.
+ */
+
 bool Max30102Sensor::checkPartID()
 {
     uint8_t id = readRegister(REG_PART_ID);
@@ -165,6 +183,12 @@ bool Max30102Sensor::checkPartID()
     }
     return true;
 }
+
+/**
+ * @brief Configure sensor sampling parameters.
+ * @note The 10ms sleep after reset is explicitly required by MAX30102 datasheet
+ *    and occurs ONLY during initialization.
+ */
 
 bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPulseWidth width)
 {
@@ -204,6 +228,10 @@ bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPuls
     return true;
 }
 
+/**
+ * @brief Start the realtime data acquisition thread (blocking epoll loop).
+ */
+
 void Max30102Sensor::start()
 {
     if (running_)
@@ -215,6 +243,10 @@ void Max30102Sensor::start()
     reader_thread_ = std::thread(&Max30102Sensor::dataWorker, this);
     setStatus(SensorStatus::RUNNING);
 }
+
+/**
+ * @brief Stop the acquisition thread safely.
+ */
 
 void Max30102Sensor::stop()
 {
@@ -233,11 +265,20 @@ void Max30102Sensor::stop()
     setStatus(SensorStatus::READY);
 }
 
+/**
+ * @brief Register callback to be called when new PPG samples are ready.
+ * @param cb Callback function (executed in worker thread).
+ */
+
 void Max30102Sensor::setDataCallback(DataCallback cb)
 {
     std::lock_guard<std::mutex> lock(mutex_);
     data_callback_ = std::move(cb);
 }
+
+/**
+ * @brief Get the latest samples (thread-safe).
+ */
 
 std::vector<Sample> Max30102Sensor::getLatestSamples(size_t maxCount) const
 {
@@ -429,11 +470,19 @@ void Max30102Sensor::readFifo()
     }
 }
 
+/**
+ * @brief Write a register via I2C.
+ */
+
 void Max30102Sensor::writeRegister(uint8_t reg, uint8_t value)
 {
     uint8_t buf[2] = {reg, value};
     write(i2c_fd_, buf, 2);
 }
+
+/**
+ * @brief Read a register via I2C.
+ */
 
 uint8_t Max30102Sensor::readRegister(uint8_t reg)
 {
@@ -452,6 +501,12 @@ std::string Max30102Sensor::getLastError() const
     std::lock_guard<std::mutex> lock(error_mutex_);
     return last_error_;
 }
+
+/**
+ * @brief Internal helper to update sensor status and error message.
+ * @param s   New status
+ * @param err Optional error message
+ */
 
 void Max30102Sensor::setStatus(SensorStatus s, const std::string& err)
 {
