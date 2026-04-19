@@ -58,8 +58,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 ## 🔌 Hardware Configuration & Reproducibility
 *To ensure project reproducibility, the hardware setup follows the professional schematic below.*
 
-###System Schematic
-### 1. ![VibePulse Schematic](schematic.png) 
+### 1.System Schematic  ![VibePulse Schematic](schematic.png) 
 *Note: Please ensure the MAX30102 sensor is powered by the 3.3V rail to prevent logic level mismatch.*
 
 ### 2. Wiring Diagram (Raspberry Pi 5 to MAX30102)
