@@ -5,6 +5,8 @@
 //  one track playing at a time, auto-advance + crossfade.
 // ============================================================
 
+#include "MusicPlayer.h"  // for IAudioBackend, CROSSFADE_STEPS, CROSSFADE_STEP_MS
+
 #include <string>
 #include <vector>
 #include <functional>
@@ -14,22 +16,10 @@
 #include <mutex>
 #include <condition_variable>
 #include <random>
+#include <optional>
+#include <unordered_map>
 
-// ── Audio backend abstraction ─────────────────────────────────
-struct IAudioBackend {
-    virtual ~IAudioBackend() = default;
-    virtual int  loadTrack(const std::string& path) = 0;
-    virtual void freeTrack(int id)                  = 0;
-    virtual void play(int id, int loops = 0)        = 0;  // loops=0 → play once
-    virtual void setVolume(int id, int vol)         = 0;
-    virtual void halt(int id)                       = 0;
-    virtual bool isReady() const                    = 0;
-    virtual bool isFinished(int id) const           = 0;
-};
-
-constexpr int ZONE_COUNT        = 6;
-constexpr int CROSSFADE_STEPS   = 20;
-constexpr int CROSSFADE_STEP_MS = 50;   // 20 × 50ms = 1s total
+constexpr int ZONE_COUNT = 6;
 
 // Maps BPM to zone 1..6
 inline int bpmToZone(int bpm) {
@@ -46,10 +36,12 @@ inline int bpmToZone(int bpm) {
 // ─────────────────────────────────────────────────────────────
 class ZoneMusicPlayer {
 public:
+    static constexpr int kZoneCount = ZONE_COUNT;
+
     explicit ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend);
     ~ZoneMusicPlayer();
 
-    // Load tracks for a zone (1..6). Call once per zone; multiple tracks supported.
+    // Load tracks for a zone (1..6). Supports multiple tracks per zone.
     bool loadZone(int zone, const std::vector<std::string>& paths);
 
     // Feed BPM updates from the heart-rate pipeline.
@@ -58,10 +50,15 @@ public:
     // Force a zone switch with crossfade (1..6). Safe to call from any thread.
     void setZone(int zone);
 
-    int  currentZone()    const { return m_currentZone.load(); }
-    bool isCrossfading()  const { return m_crossfading.load(); }
-    int  debugVolumeIn()  const { return m_volIn.load();  }
-    int  debugVolumeOut() const { return m_volOut.load(); }
+    int  currentZone()   const { return m_currentZone.load(); }
+    int  targetZone()    const { return m_currentZone.load(); }  // same: no separate target in this model
+    bool isCrossfading() const { return m_crossfading.load(); }
+    int  debugVolumeIn() const { return m_volIn.load();  }
+    int  debugVolumeOut()const { return m_volOut.load(); }
+
+    // Path of the currently playing track (for status display).
+    std::optional<std::string> currentTrackPath() const;
+    std::optional<std::string> targetTrackPath()  const;
 
     void setTransitionCallback(std::function<void(int zone)> cb);
 
@@ -71,26 +68,28 @@ private:
     void monitorLoop();
     void stopWorker();
 
-private:
-    std::shared_ptr<IAudioBackend>  m_backend;
+    std::shared_ptr<IAudioBackend>        m_backend;
 
-    std::vector<int>                m_zoneHandles[ZONE_COUNT];
-    int                             m_currentHandle{ -1 };
+    std::vector<int>                      m_zoneHandles[ZONE_COUNT];
+    std::unordered_map<int, std::string>  m_handlePaths;  // handle → file path
+    int                                   m_currentHandle{ -1 };
 
-    std::atomic<int>                m_currentZone  { 1 };
-    std::atomic<bool>               m_crossfading  { false };
-    std::atomic<bool>               m_stopRequested{ false };
-    std::atomic<int>                m_volIn        { 128 };
-    std::atomic<int>                m_volOut       {   0 };
+    std::atomic<int>                      m_currentZone  { 1 };
+    std::atomic<bool>                     m_crossfading  { false };
+    std::atomic<bool>                     m_stopRequested{ false };
+    std::atomic<int>                      m_volIn        { 128 };
+    std::atomic<int>                      m_volOut       {   0 };
 
-    std::thread                     m_worker;
-    std::thread                     m_monitor;
-    std::atomic<bool>               m_monitorStop  { false };
+    std::thread                           m_worker;
+    std::thread                           m_monitor;
+    std::atomic<bool>                     m_monitorStop  { false };
 
-    // Lets runCrossfade wake immediately when interrupted instead of sleeping.
-    std::mutex                      m_cv_mutex;
-    std::condition_variable         m_cv;
+    mutable std::mutex                    m_pathMutex;
+    std::string                           m_currentTrackPath;
 
-    std::function<void(int)>        m_onTransition;
-    std::mt19937                    m_rng{ std::random_device{}() };
+    std::mutex                            m_cv_mutex;
+    std::condition_variable               m_cv;
+
+    std::function<void(int)>              m_onTransition;
+    std::mt19937                          m_rng{ std::random_device{}() };
 };

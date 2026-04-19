@@ -76,7 +76,6 @@ public:
             Mix_HaltChannel(it->second);
     }
 
-    // Returns true if the channel has stopped playing (track finished)
     bool isFinished(int id) const override {
         auto it = m_channels.find(id);
         if (it == m_channels.end()) return true;

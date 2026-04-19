@@ -1,19 +1,32 @@
 #include "../include/HeartRateCalculator.h"
-#include "../include/sensor.h"
-#include "../include/ZoneMusicPlayer.h"
-#include "../include/SDL2AudioBackend.h"
+#include "../include/Sensor.h"
 
-#include <iostream>
-#include <thread>
-#include <chrono>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <csignal>
-#include <filesystem>
-#include <vector>
+#include <cstdint>
+#include <iostream>
+#include <mutex>
+#include <optional>
 #include <string>
-#include <algorithm>
+#include <thread>
+#include <unistd.h>
+#include <vector>
 
-static std::atomic<bool> g_running{true};
+#ifdef VIBEPULSE_ENABLE_AUDIO
+#include "../include/SDL2AudioBackend.h"
+#include "../include/ZoneMusicPlayer.h"
+
+#include <algorithm>
+#include <array>
+#include <filesystem>
+#include <memory>
+#endif
+
+namespace {
+
+std::atomic<bool> g_running{true};
 
 void signalHandler(int) {
     g_running = false;
@@ -33,104 +46,444 @@ double sampleRateToHz(SampleRate rate) {
     }
 }
 
-// 扫描某个 zone 文件夹下所有 .wav 文件
-std::vector<std::string> getZoneTracks(int zone) {
-    std::string path = "assets/music/zone" + std::to_string(zone);
-    std::vector<std::string> tracks;
-    if (!std::filesystem::exists(path)) {
-        std::cerr << "[WARN] Music folder not found: " << path << std::endl;
-        return tracks;
+enum class MonitorState {
+    WaitingForSamples,
+    NoFinger,
+    Measuring,
+    HeartRateReady
+};
+
+struct AudioSnapshot {
+    bool available = false;
+    std::optional<std::string> current_track;
+    std::optional<std::string> target_track;
+};
+
+struct AppSnapshot {
+    bool has_samples = false;
+    bool finger_detected = false;
+    std::optional<int> bpm;
+    AudioSnapshot audio;
+};
+
+class AppStateStore {
+public:
+    void markSamplesReceived() {
+        update([](AppSnapshot& snapshot) {
+            snapshot.has_samples = true;
+        });
     }
-    for (auto& entry : std::filesystem::directory_iterator(path)) {
-        if (entry.path().extension() == ".wav") {
-            tracks.push_back(entry.path().string());
+
+    void setFingerDetected(bool finger_detected) {
+        update([finger_detected](AppSnapshot& snapshot) {
+            snapshot.finger_detected = finger_detected;
+            if (!finger_detected) {
+                snapshot.bpm.reset();
+            }
+        });
+    }
+
+    void setBpm(int bpm) {
+        update([bpm](AppSnapshot& snapshot) {
+            snapshot.bpm = bpm;
+        });
+    }
+
+    void setAudioSnapshot(const AudioSnapshot& audio_snapshot) {
+        update([&audio_snapshot](AppSnapshot& snapshot) {
+            snapshot.audio = audio_snapshot;
+        });
+    }
+
+    AppSnapshot waitForUpdate(std::uint64_t last_seen_version,
+                              std::chrono::steady_clock::time_point deadline,
+                              bool& changed) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait_until(lock, deadline, [&] {
+            return stop_requested_ || version_ != last_seen_version;
+        });
+
+        changed = version_ != last_seen_version;
+        return snapshot_;
+    }
+
+    std::uint64_t version() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return version_;
+    }
+
+    void stop() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop_requested_ = true;
+        }
+        cv_.notify_all();
+    }
+
+private:
+    template <typename UpdateFn>
+    void update(UpdateFn&& update_fn) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            update_fn(snapshot_);
+            ++version_;
+        }
+        cv_.notify_all();
+    }
+
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    AppSnapshot snapshot_;
+    std::uint64_t version_ = 0;
+    bool stop_requested_ = false;
+};
+
+class ConsolePresenter {
+public:
+    explicit ConsolePresenter(AppStateStore& state_store)
+        : state_store_(state_store),
+          worker_(&ConsolePresenter::run, this) {
+    }
+
+    ~ConsolePresenter() {
+        stop();
+    }
+
+    void stop() {
+        if (!stop_requested_.exchange(true)) {
+            state_store_.stop();
+        }
+        if (worker_.joinable()) {
+            worker_.join();
         }
     }
-    std::sort(tracks.begin(), tracks.end());
-    std::cout << "[INFO] Zone " << zone << ": "
-              << tracks.size() << " tracks loaded" << std::endl;
-    return tracks;
-}
 
-int main() {
-    std::signal(SIGINT, signalHandler);
-    std::signal(SIGTERM, signalHandler);
+private:
+    static MonitorState determineState(const AppSnapshot& snapshot) {
+        if (!snapshot.has_samples) {
+            return MonitorState::WaitingForSamples;
+        }
+        if (!snapshot.finger_detected) {
+            return MonitorState::NoFinger;
+        }
+        if (snapshot.bpm.has_value()) {
+            return MonitorState::HeartRateReady;
+        }
+        return MonitorState::Measuring;
+    }
 
-    int interruptPin = DEFAULT_DRDY_GPIO;
-    SampleAverage avg = SAMPLEAVG_4;
-    SampleRate rate = SAMPLERATE_100;
-    LedPulseWidth width = PULSEWIDTH_411;
+    static std::string makeStatusMessage(const AppSnapshot& snapshot) {
+        std::string status_message;
+        switch (determineState(snapshot)) {
+            case MonitorState::WaitingForSamples:
+                status_message = "[INFO] Waiting for sensor data...";
+                break;
+            case MonitorState::NoFinger:
+                status_message = "[INFO] No finger detected. Place your fingertip steadily on the sensor.";
+                break;
+            case MonitorState::HeartRateReady:
+                status_message = "[INFO] Heart Rate: " + std::to_string(*snapshot.bpm) + " BPM";
+                break;
+            case MonitorState::Measuring:
+            default:
+                status_message = "[INFO] Measuring...";
+                break;
+        }
 
-    try {
-        // ── 传感器初始化 ──────────────────────────────────────
-        Max30102Sensor sensor(interruptPin, avg, rate, width);
+        if (snapshot.audio.current_track.has_value()) {
+            status_message += " | Music: " + *snapshot.audio.current_track;
+        }
+        if (snapshot.audio.target_track.has_value() &&
+            snapshot.audio.target_track != snapshot.audio.current_track) {
+            status_message += " -> " + *snapshot.audio.target_track;
+        }
 
-        if (!sensor.initialize()) {
-            std::cerr << "[ERROR] Sensor initialization failed." << std::endl;
+        return status_message;
+    }
+
+    void logStateTransitionTiming(MonitorState state, std::chrono::steady_clock::time_point now) {
+        if (state == MonitorState::NoFinger &&
+            last_state_ == MonitorState::Measuring &&
+            last_measuring_time_.has_value()) {
+            const auto ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_measuring_time_).count();
+            std::cout << "    [TIMING] Measuring -> No finger: " << ms << " ms" << std::endl;
+        } else if (state == MonitorState::Measuring &&
+                   last_state_ == MonitorState::NoFinger &&
+                   last_no_finger_time_.has_value()) {
+            const auto ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_no_finger_time_).count();
+            std::cout << "    [TIMING] No finger -> Measuring: " << ms << " ms" << std::endl;
+        }
+
+        if (state == MonitorState::NoFinger) {
+            last_no_finger_time_ = now;
+        } else if (state == MonitorState::Measuring) {
+            last_measuring_time_ = now;
+        }
+    }
+
+    void publish(const AppSnapshot& snapshot, bool periodic_refresh) {
+        const auto now = std::chrono::steady_clock::now();
+        const MonitorState state = determineState(snapshot);
+        const std::string status_message = makeStatusMessage(snapshot);
+        const bool state_changed = !last_state_.has_value() || state != *last_state_;
+        const bool message_changed = status_message != last_status_;
+        const bool bpm_changed = snapshot.bpm != last_bpm_;
+
+        if (!state_changed && !message_changed && !bpm_changed && !periodic_refresh) {
+            return;
+        }
+
+        ++output_counter_;
+        const auto since_last_output_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_output_time_).count();
+        std::cout << "[" << output_counter_ << "][+" << since_last_output_ms << "ms] "
+                  << status_message << std::endl;
+
+        if (state_changed) {
+            logStateTransitionTiming(state, now);
+        }
+
+        last_status_ = status_message;
+        last_bpm_ = snapshot.bpm;
+        last_state_ = state;
+        last_output_time_ = now;
+        last_publish_time_ = now;
+    }
+
+    void run() {
+        std::uint64_t seen_version = state_store_.version();
+
+        while (!stop_requested_.load()) {
+            const auto refresh_interval =
+                (last_state_.has_value() && *last_state_ == MonitorState::HeartRateReady)
+                    ? std::chrono::milliseconds(800)
+                    : std::chrono::seconds(3);
+            const auto deadline = last_publish_time_ + refresh_interval;
+
+            bool changed = false;
+            const AppSnapshot snapshot = state_store_.waitForUpdate(seen_version, deadline, changed);
+            if (stop_requested_.load()) {
+                break;
+            }
+
+            const auto now = std::chrono::steady_clock::now();
+            const bool periodic_refresh = now >= deadline;
+            seen_version = state_store_.version();
+            publish(snapshot, periodic_refresh && !changed);
+        }
+    }
+
+    AppStateStore& state_store_;
+    std::atomic<bool> stop_requested_{false};
+    std::thread worker_;
+    std::optional<MonitorState> last_state_;
+    std::string last_status_;
+    std::optional<int> last_bpm_;
+    std::chrono::steady_clock::time_point last_publish_time_ =
+        std::chrono::steady_clock::now() - std::chrono::seconds(10);
+    std::chrono::steady_clock::time_point last_output_time_ = std::chrono::steady_clock::now();
+    std::optional<std::chrono::steady_clock::time_point> last_no_finger_time_;
+    std::optional<std::chrono::steady_clock::time_point> last_measuring_time_;
+    unsigned long long output_counter_ = 0;
+};
+
+#ifdef VIBEPULSE_ENABLE_AUDIO
+class AudioService {
+public:
+    explicit AudioService(AppStateStore& state_store)
+        : state_store_(state_store) {
+    }
+
+    void initialize(int argc, char** argv) {
+        std::cout << "[AUDIO] Initialising audio service..." << std::endl;
+
+        std::string music_root = "assets/music";
+        for (int i = 1; i + 1 < argc; ++i) {
+            if (std::string(argv[i]) == "--music-root") {
+                music_root = argv[i + 1];
+            }
+        }
+
+        auto collect_zone_wavs = [&](int zone) -> std::vector<std::string> {
+            namespace fs = std::filesystem;
+            const fs::path dir = fs::path(music_root) / ("zone" + std::to_string(zone));
+            std::vector<std::string> wavs;
+            std::error_code ec;
+
+            if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
+                return wavs;
+            }
+            for (const auto& entry : fs::directory_iterator(dir, ec)) {
+                if (ec) break;
+                if (!entry.is_regular_file(ec)) continue;
+                const auto ext = entry.path().extension().string();
+                if (ext == ".wav" || ext == ".WAV") {
+                    wavs.push_back(entry.path().string());
+                }
+            }
+            std::sort(wavs.begin(), wavs.end());
+            return wavs;
+        };
+
+        try {
+            auto backend = std::make_shared<SDL2AudioBackend>();
+            zone_player_ = std::make_unique<ZoneMusicPlayer>(backend);
+
+            bool ok = true;
+            for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
+                auto wavs = collect_zone_wavs(z);
+                if (wavs.empty()) {
+                    std::cerr << "[AUDIO] No .wav files in: "
+                              << music_root << "/zone" << z << std::endl;
+                    ok = false;
+                    break;
+                }
+                if (!zone_player_->loadZone(z, wavs)) {
+                    std::cerr << "[AUDIO] Failed to load zone " << z << " tracks." << std::endl;
+                    ok = false;
+                    break;
+                }
+                std::cout << "[AUDIO] zone" << z << ": " << wavs.size() << " track(s)" << std::endl;
+            }
+
+            if (!ok) {
+                zone_player_.reset();
+            } else {
+                zone_player_->setTransitionCallback([this](int) {
+                    publishAudioSnapshot();
+                });
+                publishAudioSnapshot();
+                std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[AUDIO] Disabled: " << e.what() << std::endl;
+            zone_player_.reset();
+            publishAudioSnapshot();
+        }
+    }
+
+    void updateBpm(int bpm) {
+        if (!zone_player_) {
+            return;
+        }
+        zone_player_->updateBPM(bpm);
+        publishAudioSnapshot();
+    }
+
+private:
+    void publishAudioSnapshot() {
+        AudioSnapshot snapshot;
+        snapshot.available = zone_player_ != nullptr;
+
+        if (zone_player_) {
+            snapshot.current_track = trackStem(zone_player_->currentTrackPath());
+            snapshot.target_track  = trackStem(zone_player_->targetTrackPath());
+        }
+
+        state_store_.setAudioSnapshot(snapshot);
+    }
+
+    static std::optional<std::string> trackStem(const std::optional<std::string>& path) {
+        if (!path.has_value()) return std::nullopt;
+        namespace fs = std::filesystem;
+        const std::string stem = fs::path(*path).stem().string();
+        if (stem.empty()) return std::nullopt;
+        return stem;
+    }
+
+    AppStateStore& state_store_;
+    std::unique_ptr<ZoneMusicPlayer> zone_player_;
+};
+#else
+class AudioService {
+public:
+    explicit AudioService(AppStateStore&) {}
+    void initialize(int, char**) {}
+    void updateBpm(int) {}
+};
+#endif
+
+class MonitorApplication {
+public:
+    MonitorApplication(int argc, char** argv)
+        : argc_(argc),
+          argv_(argv),
+          sensor_(DEFAULT_DRDY_GPIO, SAMPLEAVG_4, SAMPLERATE_50, PULSEWIDTH_411),
+          heart_rate_(sampleRateToHz(SAMPLERATE_50)),
+          presenter_(state_store_),
+          audio_service_(state_store_) {
+    }
+
+    int run() {
+        std::signal(SIGINT, signalHandler);
+        std::signal(SIGTERM, signalHandler);
+
+        try {
+            if (!sensor_.initialize()) {
+                std::cerr << "Sensor initialization failed." << std::endl;
+                return 1;
+            }
+
+            audio_service_.initialize(argc_, argv_);
+            wireCallbacks();
+
+            sensor_.start();
+            std::cout << "Heart rate monitor started. Press Ctrl+C to stop." << std::endl;
+
+            while (g_running.load()) {
+                pause();
+            }
+
+            sensor_.stop();
+            presenter_.stop();
+            std::cout << "Stopped." << std::endl;
+        } catch (const std::exception& e) {
+            presenter_.stop();
+            std::cerr << "Fatal error: " << e.what() << std::endl;
             return 1;
         }
 
-        HeartRateCalculator hr(sampleRateToHz(rate));
-
-        sensor.setDataCallback([&hr](const std::vector<Sample>& samples) {
-            hr.processSamples(samples);
-        });
-
-        // ── ZoneMusicPlayer 初始化 ────────────────────────────
-        auto backend = std::make_shared<SDL2AudioBackend>();
-        ZoneMusicPlayer player(backend);
-
-        player.loadZone(1, getZoneTracks(1));
-        player.loadZone(2, getZoneTracks(2));
-        player.loadZone(3, getZoneTracks(3));
-        player.loadZone(4, getZoneTracks(4));
-        player.loadZone(5, getZoneTracks(5));
-        player.loadZone(6, getZoneTracks(6));
-
-        // 区间切换时打印日志
-        player.setTransitionCallback([](int zone) {
-            const char* names[] = {
-                "Zone1 (< 80 BPM)",
-                "Zone2 (80-99 BPM)",
-                "Zone3 (100-119 BPM)",
-                "Zone4 (120-139 BPM)",
-                "Zone5 (140-159 BPM)",
-                "Zone6 (>= 160 BPM)"
-            };
-            std::cout << "[MUSIC] --> " << names[zone - 1] << std::endl;
-        });
-
-        sensor.start();
-        std::cout << "VibePulse started. Press Ctrl+C to stop." << std::endl;
-
-        // ── 主循环 ────────────────────────────────────────────
-        while (g_running) {
-            bool finger = hr.fingerDetected();
-            auto bpm    = hr.getLatestBpm();
-
-            if (!finger) {
-                std::cout << "[INFO] No finger detected." << std::endl;
-            } else if (bpm.has_value()) {
-                int bpmInt = static_cast<int>(*bpm);
-                std::cout << "[INFO] Heart Rate: " << bpmInt << " BPM"
-                          << " | Zone: " << bpmToZone(bpmInt)
-                          << std::endl;
-
-                player.updateBPM(bpmInt);
-            } else {
-                std::cout << "[INFO] Measuring..." << std::endl;
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        }
-
-        sensor.stop();
-        std::cout << "Stopped." << std::endl;
-
-    } catch (const std::exception& e) {
-        std::cerr << "[ERROR] Fatal: " << e.what() << std::endl;
-        return 1;
+        return 0;
     }
 
-    return 0;
+private:
+    void wireCallbacks() {
+        sensor_.setDataCallback([this](const std::vector<Sample>& samples) {
+            state_store_.markSamplesReceived();
+
+            std::vector<float> ir_samples;
+            ir_samples.reserve(samples.size());
+            for (const Sample& sample : samples) {
+                ir_samples.push_back(sample.ir);
+            }
+            heart_rate_.processIrSamples(ir_samples);
+        });
+
+        heart_rate_.setFingerStateCallback([this](bool finger_present) {
+            state_store_.setFingerDetected(finger_present);
+        });
+
+        heart_rate_.setBpmCallback([this](double bpm_value) {
+            const int rounded_bpm = static_cast<int>(bpm_value + 0.5);
+            state_store_.setBpm(rounded_bpm);
+            audio_service_.updateBpm(rounded_bpm);
+        });
+    }
+
+    int argc_;
+    char** argv_;
+    AppStateStore state_store_;
+    Max30102Sensor sensor_;
+    HeartRateCalculator heart_rate_;
+    ConsolePresenter presenter_;
+    AudioService audio_service_;
+};
+
+} // namespace
+
+int main(int argc, char** argv) {
+    MonitorApplication app(argc, argv);
+    return app.run();
 }

@@ -2,7 +2,7 @@
 //  ZoneMusicPlayer.cpp — VibePulse ENG5220
 // ============================================================
 
-#include "ZoneMusicPlayer.h"
+#include "../include/ZoneMusicPlayer.h"
 #include <stdexcept>
 #include <chrono>
 #include <algorithm>
@@ -37,6 +37,7 @@ bool ZoneMusicPlayer::loadZone(int zone, const std::vector<std::string>& paths) 
         int h = m_backend->loadTrack(p);
         if (h < 0) return false;
         handles.push_back(h);
+        m_handlePaths[h] = p;
     }
     // Auto-start zone 1's first track (play once; monitor will auto-advance)
     if (zone == 1 && m_currentHandle < 0 && !handles.empty()) {
@@ -44,6 +45,8 @@ bool ZoneMusicPlayer::loadZone(int zone, const std::vector<std::string>& paths) 
         m_backend->play(m_currentHandle, 0);
         m_backend->setVolume(m_currentHandle, 128);
         m_volIn.store(128);
+        std::lock_guard<std::mutex> lk(m_pathMutex);
+        m_currentTrackPath = paths[0];
     }
     return true;
 }
@@ -55,6 +58,19 @@ void ZoneMusicPlayer::updateBPM(int bpm) {
     int target = bpmToZone(bpm);
     if (target != m_currentZone.load())
         setZone(target);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Track path accessors
+// ─────────────────────────────────────────────────────────────
+std::optional<std::string> ZoneMusicPlayer::currentTrackPath() const {
+    std::lock_guard<std::mutex> lk(m_pathMutex);
+    if (m_currentTrackPath.empty()) return std::nullopt;
+    return m_currentTrackPath;
+}
+
+std::optional<std::string> ZoneMusicPlayer::targetTrackPath() const {
+    return currentTrackPath();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -96,6 +112,12 @@ void ZoneMusicPlayer::monitorLoop() {
             m_currentHandle = nextHandle;
             m_backend->play(nextHandle, 0);
             m_backend->setVolume(nextHandle, 128);
+
+            auto it = m_handlePaths.find(nextHandle);
+            if (it != m_handlePaths.end()) {
+                std::lock_guard<std::mutex> lk(m_pathMutex);
+                m_currentTrackPath = it->second;
+            }
         }
     }
 }
@@ -117,6 +139,12 @@ void ZoneMusicPlayer::setZone(int zone) {
 
     int hOut = m_currentHandle;
     m_currentHandle = hIn;
+
+    auto it = m_handlePaths.find(hIn);
+    if (it != m_handlePaths.end()) {
+        std::lock_guard<std::mutex> lk(m_pathMutex);
+        m_currentTrackPath = it->second;
+    }
 
     m_backend->play(hIn, 0);
     m_backend->setVolume(hIn, 0);
