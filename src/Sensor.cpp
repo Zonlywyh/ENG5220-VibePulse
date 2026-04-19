@@ -49,28 +49,33 @@ Max30102Sensor::~Max30102Sensor() {
 }
 
 bool Max30102Sensor::initialize() {
+    setStatus(SensorStatus::UNINITIALIZED);
     char filename[32];
     std::snprintf(filename, sizeof(filename), "/dev/i2c-%d", DEFAULT_I2C_BUS);
 
     i2c_fd_ = open(filename, O_RDWR);
     if (i2c_fd_ < 0) {
         std::cerr << "Could not open I2C bus." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not open I2C bus");
         return false;
     }
 
     if (ioctl(i2c_fd_, I2C_SLAVE, DEFAULT_MAX30102_ADDRESS) < 0) {
         std::cerr << "Could not set I2C address." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not set I2C address");
         return false;
     }
 
     if (!checkPartID()) {
         std::cerr << "MAX30102 part ID check failed." << std::endl;
+        setStatus(SensorStatus::ERROR, "MAX30102 part ID check failed");
         return false;
     }
 
     chip_ = gpiod_chip_open("/dev/gpiochip0");
     if (!chip_) {
         std::cerr << "Could not open /dev/gpiochip0." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not open /dev/gpiochip0");
         return false;
     }
 
@@ -80,6 +85,7 @@ bool Max30102Sensor::initialize() {
 
     if (!line_settings || !line_config || !request_config) {
         std::cerr << "Could not allocate libgpiod config objects." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not allocate libgpiod config objects");
         if (request_config) gpiod_request_config_free(request_config);
         if (line_config) gpiod_line_config_free(line_config);
         if (line_settings) gpiod_line_settings_free(line_settings);
@@ -92,6 +98,7 @@ bool Max30102Sensor::initialize() {
     unsigned int offsets[] = {static_cast<unsigned int>(interrupt_pin_)};
     if (gpiod_line_config_add_line_settings(line_config, offsets, 1, line_settings) < 0) {
         std::cerr << "Could not add GPIO line settings." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not add GPIO line settings");
         gpiod_request_config_free(request_config);
         gpiod_line_config_free(line_config);
         gpiod_line_settings_free(line_settings);
@@ -107,17 +114,20 @@ bool Max30102Sensor::initialize() {
 
     if (!line_request_) {
         std::cerr << "Could not request GPIO line for interrupt." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not request GPIO line for interrupt");
         return false;
     }
 
     if (!configureSensor()) {
         std::cerr << "Sensor configuration failed." << std::endl;
+        setStatus(SensorStatus::ERROR, "Sensor configuration failed");
         return false;
     }
 
     wake_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (wake_fd_ < 0) {
         std::cerr << "Could not create eventfd for sensor worker shutdown." << std::endl;
+        setStatus(SensorStatus::ERROR, "Could not create eventfd");
         return false;
     }
     setStatus(SensorStatus::READY);
@@ -138,9 +148,14 @@ bool Max30102Sensor::configureSensor(SampleAverage avg, SampleRate rate, LedPuls
     sampleAvg_ = avg;
     sampleRate_ = rate;
     pulseWidth_ = width;
+    // Reset the sensor (required by hardware)
 
     writeRegister(REG_MODE_CONFIG, 0x40);
+    // This 10ms delay is explicitly required by the MAX30102 datasheet
+    // after sending the reset command. It is ONLY executed during
+    // initialization phase and has NO impact on realtime performance.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // Continue with FIFO, LED, SPO2 configuration
 
     uint8_t fifoConfig = 0x10 | (static_cast<uint8_t>(avg) << 5) | 0x0F;
     writeRegister(REG_FIFO_CONFIG, fifoConfig);
@@ -171,6 +186,7 @@ void Max30102Sensor::start() {
         return;
     }
     running_ = true;
+    setStatus(SensorStatus::RUNNING);
     reader_thread_ = std::thread(&Max30102Sensor::dataWorker, this);
     setStatus(SensorStatus::RUNNING);
 }

@@ -45,6 +45,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
     * **Low-Pass Filter**: Removes high-frequency electrical artifacts.
     * **Quantitative Assessment**: Latencies are monitored to ensure data acquisition and music adaptation happen within defined tolerances.
 
+
 ## 💻 Software Structure & Reliability
 *Our code is structured using Object-Oriented principles to guarantee high reliability and ease of maintenance.*
 
@@ -75,11 +76,14 @@ Based on our verified hardware design, connect the components as follows:
 * **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
 * **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
 
+
+
 ## 📌 Key Features
 - 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
 - 🎵 **Adaptive music selection** based on inferred physiological state.
 - 🧾 **Mood and HR logging** with time-stamped entries for trend analysis.
 - ⚙️ **Production-level C++** running on Raspberry Pi (Linux).
+
 
 ## 👥 Project Management & Labor Division
 *Managed via GitHub Issues, Projects, and formal Revision Control.*
@@ -92,19 +96,22 @@ Based on our verified hardware design, connect the components as follows:
   * **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
   * **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
 
+
 ## 📢 Social Media & Promotion
 *Creating a "buzz" around VibePulse to engage potential users.*
 
 <p align="center">
   <a href="https://www.instagram.com/vibepulse2026">
     <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Instagram_icon.png/128px-Instagram_icon.png" width="52" height="52" alt="Instagram">
+
   </a>
   &nbsp;&nbsp;&nbsp;
   <a href="https://www.xiaohongshu.com/user/profile/69b1397500000000260387c5?xsec_token=YBxtCBhFe_EIjolON7N7ASj-vD2e1RUSR1M5LJVf8gmdw=&xsec_source=app_share&xhsshare=WeixinSession&appuid=69b1397500000000260387c5&apptime=1776592401&share_id=19154fd6ae34434881854bf62f2b4690">
     <img src="https://upload.wikimedia.org/wikipedia/commons/a/a4/Xiaohongshu_logo%26slogan.png" width="130" height="45" alt="Xiaohongshu">
   </a>
   &nbsp;&nbsp;&nbsp;
-</p>
+
+    
 
 ## 🛠️ Installation & Build
 *Designed for full reproducibility.*
