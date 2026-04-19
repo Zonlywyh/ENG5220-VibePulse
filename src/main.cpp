@@ -205,17 +205,15 @@ private:
         if (state == MonitorState::NoFinger &&
             last_state_ == MonitorState::Measuring &&
             last_measuring_time_.has_value()) {
-            const auto measuring_to_no_finger_ms =
+            const auto ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_measuring_time_).count();
-            std::cout << "    [TIMING] Measuring -> No finger: "
-                      << measuring_to_no_finger_ms << " ms" << std::endl;
+            std::cout << "    [TIMING] Measuring -> No finger: " << ms << " ms" << std::endl;
         } else if (state == MonitorState::Measuring &&
                    last_state_ == MonitorState::NoFinger &&
                    last_no_finger_time_.has_value()) {
-            const auto no_finger_to_measuring_ms =
+            const auto ms =
                 std::chrono::duration_cast<std::chrono::milliseconds>(now - *last_no_finger_time_).count();
-            std::cout << "    [TIMING] No finger -> Measuring: "
-                      << no_finger_to_measuring_ms << " ms" << std::endl;
+            std::cout << "    [TIMING] No finger -> Measuring: " << ms << " ms" << std::endl;
         }
 
         if (state == MonitorState::NoFinger) {
@@ -299,7 +297,7 @@ public:
     }
 
     void initialize(int argc, char** argv) {
-        std::cout << "[AUDIO] entered audio init block" << std::endl;
+        std::cout << "[AUDIO] Initialising audio service..." << std::endl;
 
         std::string music_root = "assets/music";
         for (int i = 1; i + 1 < argc; ++i) {
@@ -308,71 +306,56 @@ public:
             }
         }
 
-        auto pick_zone_wav = [&](int zone) -> std::optional<std::string> {
+        auto collect_zone_wavs = [&](int zone) -> std::vector<std::string> {
             namespace fs = std::filesystem;
             const fs::path dir = fs::path(music_root) / ("zone" + std::to_string(zone));
-            std::vector<fs::path> wavs;
+            std::vector<std::string> wavs;
             std::error_code ec;
 
             if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
-                return std::nullopt;
+                return wavs;
             }
-
             for (const auto& entry : fs::directory_iterator(dir, ec)) {
-                if (ec) {
-                    break;
-                }
-                if (!entry.is_regular_file(ec)) {
-                    continue;
-                }
+                if (ec) break;
+                if (!entry.is_regular_file(ec)) continue;
                 const auto ext = entry.path().extension().string();
                 if (ext == ".wav" || ext == ".WAV") {
-                    wavs.push_back(entry.path());
+                    wavs.push_back(entry.path().string());
                 }
             }
-
-            if (wavs.empty()) {
-                return std::nullopt;
-            }
-
             std::sort(wavs.begin(), wavs.end());
-            return wavs.front().string();
+            return wavs;
         };
 
         try {
-            std::cout << "[AUDIO] creating backend" << std::endl;
             auto backend = std::make_shared<SDL2AudioBackend>();
-            std::cout << "[AUDIO] creating zone player" << std::endl;
             zone_player_ = std::make_unique<ZoneMusicPlayer>(backend);
 
-            std::array<std::string, ZoneMusicPlayer::kZoneCount> paths{};
             bool ok = true;
             for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                auto path = pick_zone_wav(z);
-                if (!path.has_value()) {
-                    std::cerr << "[AUDIO] Missing .wav in: "
-                              << (music_root + "/zone" + std::to_string(z)) << std::endl;
+                auto wavs = collect_zone_wavs(z);
+                if (wavs.empty()) {
+                    std::cerr << "[AUDIO] No .wav files in: "
+                              << music_root << "/zone" << z << std::endl;
                     ok = false;
                     break;
                 }
-                paths[z - 1] = *path;
+                if (!zone_player_->loadZone(z, wavs)) {
+                    std::cerr << "[AUDIO] Failed to load zone " << z << " tracks." << std::endl;
+                    ok = false;
+                    break;
+                }
+                std::cout << "[AUDIO] zone" << z << ": " << wavs.size() << " track(s)" << std::endl;
             }
 
-            std::cout << "[AUDIO] loading zone tracks" << std::endl;
-            if (ok && !zone_player_->loadZoneTracks(paths)) {
-                std::cerr << "[AUDIO] Failed to load zone tracks. Check WAV format/paths." << std::endl;
+            if (!ok) {
                 zone_player_.reset();
-            } else if (zone_player_) {
-                std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
-                for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                    std::cout << "[AUDIO] zone" << z << " -> " << paths[z - 1] << std::endl;
-                }
-                std::cout << "[AUDIO] initial -> zone1 -> " << paths[0] << std::endl;
-
+            } else {
                 zone_player_->setTransitionCallback([this](int) {
                     publishAudioSnapshot();
                 });
                 publishAudioSnapshot();
+                std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "[AUDIO] Disabled: " << e.what() << std::endl;
@@ -396,21 +379,17 @@ private:
 
         if (zone_player_) {
             snapshot.current_track = trackStem(zone_player_->currentTrackPath());
-            snapshot.target_track = trackStem(zone_player_->targetTrackPath());
+            snapshot.target_track  = trackStem(zone_player_->targetTrackPath());
         }
 
         state_store_.setAudioSnapshot(snapshot);
     }
 
     static std::optional<std::string> trackStem(const std::optional<std::string>& path) {
-        if (!path.has_value()) {
-            return std::nullopt;
-        }
+        if (!path.has_value()) return std::nullopt;
         namespace fs = std::filesystem;
         const std::string stem = fs::path(*path).stem().string();
-        if (stem.empty()) {
-            return std::nullopt;
-        }
+        if (stem.empty()) return std::nullopt;
         return stem;
     }
 
