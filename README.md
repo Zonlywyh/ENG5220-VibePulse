@@ -52,6 +52,31 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 * **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
 * **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
+### . Hardware Rationale
+* **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
+* **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
+## 🔌 Hardware Configuration & Reproducibility
+*To ensure project reproducibility, the hardware setup follows the professional schematic below.*
+
+###System Schematic
+### 1. ![VibePulse Schematic](schematic.png) 
+*Note: Please ensure the MAX30102 sensor is powered by the 3.3V rail to prevent logic level mismatch.*
+
+### 2. Wiring Diagram (Raspberry Pi 5 to MAX30102)
+Based on our verified hardware design, connect the components as follows:
+
+| MAX30102 Pin | Raspberry Pi 5 Pin | Function |
+| :--- | :--- | :--- |
+| **VIN** | Pin 1 (3.3V Power) | Power Supply |
+| **GND** | Pin 6 (Ground) | Common Ground |
+| **SCL** | Pin 5 (GPIO 3 / SCL) | I2C Clock Line |
+| **SDA** | Pin 3 (GPIO 2 / SDA) | I2C Data Line |
+| **INT** | Pin 7 (GPIO 4) | Hardware Interrupt (Optional) |
+
+### 3. Hardware Rationale
+* **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
+* **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
+
 ## 📌 Key Features
 - 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
 - 🎵 **Adaptive music selection** based on inferred physiological state.
