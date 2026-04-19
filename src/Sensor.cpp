@@ -58,12 +58,8 @@ Max30102Sensor::~Max30102Sensor()
     }
 }
 
-<<<<<<< HEAD
-bool Max30102Sensor::initialize() {
-=======
 bool Max30102Sensor::initialize()
 {
->>>>>>> feature/music-player
     setStatus(SensorStatus::UNINITIALIZED);
     char filename[32];
     std::snprintf(filename, sizeof(filename), "/dev/i2c-%d", DEFAULT_I2C_BUS);
@@ -446,31 +442,21 @@ uint8_t Max30102Sensor::readRegister(uint8_t reg)
     read(i2c_fd_, &value, 1);
     return value;
 }
-<<<<<<< HEAD
-SensorStatus Max30102Sensor::getStatus() const {
-    return status_.load();
-}
-
-std::string Max30102Sensor::getLastError() const {
-=======
-
 SensorStatus Max30102Sensor::getStatus() const
 {
-    std::lock_guard<std::mutex> lock(error_mutex_);
-    return status_;
+    return status_.load();
 }
 
 std::string Max30102Sensor::getLastError() const
 {
->>>>>>> feature/music-player
     std::lock_guard<std::mutex> lock(error_mutex_);
     return last_error_;
 }
 
 void Max30102Sensor::setStatus(SensorStatus s, const std::string& err)
 {
+    status_.store(s);
     std::lock_guard<std::mutex> lock(error_mutex_);
-    status_ = s;
     if (!err.empty())
     {
         last_error_ = err;
