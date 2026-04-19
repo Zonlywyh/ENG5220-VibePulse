@@ -8,11 +8,13 @@
 #include <chrono>
 #include <stdexcept>
 
+// Uses steady_clock (monotonic) to avoid jumps from NTP/DST adjustments.
 static long long steadyNowMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
+// Initialises handles to -1 (not loaded) and seeds debounce timestamps to now.
 ZoneMusicPlayer::ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend)
     : m_backend(std::move(backend))
 {
@@ -30,6 +32,7 @@ ZoneMusicPlayer::~ZoneMusicPlayer() {
     freeTracks();
 }
 
+// Sets stop flag and joins the worker thread to prevent data races on track state.
 void ZoneMusicPlayer::stopWorker() {
     m_stopRequested.store(true);
     if (m_worker.joinable()) {
@@ -38,6 +41,7 @@ void ZoneMusicPlayer::stopWorker() {
     m_crossfading.store(false);
 }
 
+// Frees all backend track handles and resets them to -1.
 void ZoneMusicPlayer::freeTracks() {
     for (int& h : m_handles) {
         if (h >= 0) {
@@ -65,6 +69,7 @@ bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& 
     m_pathsLoaded.store(true);
 
     // Start all tracks looping, but only zone1 audible initially.
+    // All tracks play silently from t=0 to stay time-aligned for glitch-free crossfades.
     for (int i = 0; i < kZoneCount; ++i) {
         m_backend->play(m_handles[i], -1);
         m_backend->setVolume(m_handles[i], (i == 0) ? 128 : 0);
@@ -104,6 +109,7 @@ int ZoneMusicPlayer::bpmToZone(int bpm) const {
     return 6;
 }
 
+// Two-stage filter: zone must stay stable for kZoneStableMs, then respect kMinSwitchIntervalMs cooldown.
 void ZoneMusicPlayer::updateBPM(int bpm) {
     const int desired = bpmToZone(bpm);
     const long long now = steadyNowMs();
@@ -126,6 +132,7 @@ void ZoneMusicPlayer::updateBPM(int bpm) {
     setZone(desired);
 }
 
+// Cancels any running crossfade, then spawns a new worker thread for the transition.
 void ZoneMusicPlayer::setZone(int zone) {
     if (zone < 1) zone = 1;
     if (zone > kZoneCount) zone = kZoneCount;
@@ -151,6 +158,8 @@ void ZoneMusicPlayer::setZone(int zone) {
     });
 }
 
+// Linear crossfade: volIn ramps 0→128, volOut ramps 128→0 over CROSSFADE_STEPS ticks.
+// Polls m_stopRequested each step for cooperative cancellation.
 void ZoneMusicPlayer::runCrossfade(int fromZone, int toZone) {
     const int fromIdx = std::clamp(fromZone, 1, kZoneCount) - 1;
     const int toIdx   = std::clamp(toZone,   1, kZoneCount) - 1;
@@ -177,6 +186,7 @@ void ZoneMusicPlayer::runCrossfade(int fromZone, int toZone) {
         std::this_thread::sleep_for(std::chrono::milliseconds(CROSSFADE_STEP_MS));
     }
 
+    // Snap to exact values to eliminate floating-point rounding drift.
     m_backend->setVolume(hIn, 128);
     m_backend->setVolume(hOut, 0);
 
