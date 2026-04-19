@@ -27,6 +27,8 @@ struct IAudioBackend {
     virtual void halt(int id)                         = 0;
     // Returns true when audio subsystem is ready
     virtual bool isReady() const                      = 0;
+    // Returns true when the track's channel has finished playing
+    virtual bool isFinished(int id) const             { return false; }
 };
 
 // ── Heart-rate driven music mode ──────────────────────────────
