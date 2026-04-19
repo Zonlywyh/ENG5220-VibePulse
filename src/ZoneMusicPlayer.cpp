@@ -115,8 +115,16 @@ void ZoneMusicPlayer::monitorLoop() {
 
             auto it = m_handlePaths.find(nextHandle);
             if (it != m_handlePaths.end()) {
-                std::lock_guard<std::mutex> lk(m_pathMutex);
-                m_currentTrackPath = it->second;
+                {
+                    std::lock_guard<std::mutex> lk(m_pathMutex);
+                    m_currentTrackPath = it->second;
+                }
+                // Notify listeners (UI/logging) that the displayed track should update.
+                // We reuse the existing transition callback since the caller doesn't
+                // depend on zone value.
+                if (m_onTransition) {
+                    m_onTransition(zone);
+                }
             }
         }
     }
@@ -152,7 +160,6 @@ void ZoneMusicPlayer::setZone(int zone) {
     m_worker = std::thread([this, hOut, hIn, zone]() {
         runCrossfade(hOut, hIn, zone);
     });
-    m_worker.detach();
 }
 
 void ZoneMusicPlayer::stopWorker() {
