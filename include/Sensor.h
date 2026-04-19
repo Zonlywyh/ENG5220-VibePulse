@@ -16,15 +16,10 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
-#include <fcntl.h>
 #include <functional>
-#include <linux/i2c-dev.h>
 #include <mutex>
 #include <string>
-#include <sys/eventfd.h>
-#include <sys/ioctl.h>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 constexpr int DEFAULT_I2C_BUS = 1;
@@ -82,16 +77,11 @@ enum LedPulseWidth {
     PULSEWIDTH_411 = 3
 };
 
-/**
- * @brief Current sensor operational status.
- */
 enum class SensorStatus {
-    Uninitialized,
-    Initializing,
-    Ready,
-    Running,
-    Stopped,
-    Error
+    UNINITIALIZED,
+    READY,
+    RUNNING,
+    ERROR
 };
 
 class Max30102Sensor {
@@ -115,7 +105,8 @@ public:
                          LedPulseWidth width = PULSEWIDTH_411);
 
     std::vector<Sample> getLatestSamples(size_t maxCount = 100) const;
-/**
+
+    /**
      * @brief Get current sensor status (thread-safe, lock-free).
      */
     SensorStatus getStatus() const;
@@ -130,20 +121,22 @@ private:
     void readFifo();
     void writeRegister(uint8_t reg, uint8_t value);
     uint8_t readRegister(uint8_t reg);
-/**
+
+    /**
      * @brief Internal helper to update status (called from various places).
      */
     void setStatus(SensorStatus s, const std::string& err = "");
-
 
 private:
     int i2c_fd_ = -1;
     int wake_fd_ = -1;
     int interrupt_pin_;
     mutable std::mutex mutex_;
+
     std::atomic<bool> running_{false};
-    SensorStatus status_{SensorStatus::Uninitialized};
+    std::atomic<SensorStatus> status_{SensorStatus::UNINITIALIZED};
     std::string last_error_;
+    mutable std::mutex error_mutex_;         
 
     std::deque<Sample> sample_buffer_;
     DataCallback data_callback_;
