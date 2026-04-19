@@ -1,7 +1,7 @@
 #ifndef HEART_RATE_CALCULATOR_H
 #define HEART_RATE_CALCULATOR_H
 
-#include "Sensor.h"
+#include "sensor.h"
 #include <deque>
 #include <vector>
 #include <mutex>
