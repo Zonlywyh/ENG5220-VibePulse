@@ -11,12 +11,12 @@ HeartRateCalculator::HeartRateCalculator(double sampleRateHz, HeartRateConfig co
       has_samples_(false),
       latest_bpm_(std::nullopt),
       sample_index_(0),
-      baseline_(0.0),
-      smooth_(0.0),
+      baseline_(0.0),// DC component baseline
+      smooth_(0.0),// Filtered AC signal
       last_peak_time_sec_(-1.0),
-      ir_level_(0.0),
+      ir_level_(0.0),// Average IR intensity for proximity detection
       latest_raw_ir_(0.0),
-      signal_level_(0.0),
+      signal_level_(0.0),// Estimated amplitude of the heartbeat signal
       finger_present_count_(0),
       finger_absent_count_(0),
       peak_history_count_(0),
@@ -30,12 +30,14 @@ void HeartRateCalculator::processIrSample(float ir) {
     std::function<void(bool)> finger_state_callback;
 
     {
+        // Mutex protection for thread-safe state updates
         std::lock_guard<std::mutex> lock(mutex_);
         processIrSampleLocked(ir, pending_callbacks);
         bpm_callback = bpm_callback_;
         finger_state_callback = finger_state_callback_;
     }
 
+    // Execute callbacks outside the lock to prevent deadlocks or stalls
     if (pending_callbacks.finger_state_changed.has_value() && finger_state_callback) {
         finger_state_callback(*pending_callbacks.finger_state_changed);
     }
@@ -89,6 +91,8 @@ void HeartRateCalculator::processIrSampleLocked(float ir, PendingCallbacks& pend
     ++sample_index_;
     has_samples_ = true;
     latest_raw_ir_ = ir;
+
+    // Exponential Moving Average (EMA) for overall IR intensity
     ir_level_ = config_.ir_level_alpha * ir_level_ + (1.0 - config_.ir_level_alpha) * ir;
 
     updateFingerStateLocked(ir, pending_callbacks);
@@ -103,6 +107,7 @@ void HeartRateCalculator::processIrSampleLocked(float ir, PendingCallbacks& pend
 }
 
 void HeartRateCalculator::updateFingerStateLocked(float ir, PendingCallbacks& pending_callbacks) {
+   // Threshold-based detection of finger presence with debouncing
     if (ir_level_ >= config_.finger_enter_threshold) {
         ++finger_present_count_;
         finger_absent_count_ = 0;
@@ -115,6 +120,8 @@ void HeartRateCalculator::updateFingerStateLocked(float ir, PendingCallbacks& pe
         finger_detected_ = true;
         finger_absent_count_ = 0;
         pending_callbacks.finger_state_changed = true;
+
+        // Initialize signal processing state upon detection
         baseline_ = ir;
         smooth_ = 0.0;
         peak_history_count_ = 0;
@@ -130,13 +137,17 @@ void HeartRateCalculator::updateFingerStateLocked(float ir, PendingCallbacks& pe
 }
 
 void HeartRateCalculator::updateSignalModelLocked(float ir) {
+    // Remove DC component using a simple high-pass filter
     baseline_ = config_.dc_alpha * baseline_ + (1.0 - config_.dc_alpha) * ir;
     const double ac = ir - baseline_;
 
+    // Low-pass filter to smooth the AC signal (noise reduction)
     smooth_ = config_.smooth_alpha * smooth_ + (1.0 - config_.smooth_alpha) * ac;
+    // Track the rectified signal level to establish a dynamic peak threshold
     signal_level_ = config_.signal_level_alpha * signal_level_ +
                     (1.0 - config_.signal_level_alpha) * std::fabs(smooth_);
 
+    // Circular buffer for peak detection analysis
     peak_history_[peak_history_next_index_] = smooth_;
     peak_history_next_index_ = (peak_history_next_index_ + 1U) % peak_history_.size();
     if (peak_history_count_ < peak_history_.size()) {
@@ -149,6 +160,7 @@ std::optional<double> HeartRateCalculator::tryDetectBeatLocked() {
         return std::nullopt;
     }
 
+    // Identify indices for a 3-point peak check (oldest, middle, newest)
     const size_t oldest_index = peak_history_next_index_;
     const size_t middle_index = (peak_history_next_index_ + 1U) % peak_history_.size();
     const size_t newest_index = (peak_history_next_index_ + 2U) % peak_history_.size();
@@ -156,7 +168,10 @@ std::optional<double> HeartRateCalculator::tryDetectBeatLocked() {
     const double a = peak_history_[oldest_index];
     const double b = peak_history_[middle_index];
     const double c = peak_history_[newest_index];
+
+    // Calculate dynamic threshold based on the signal envelope
     const double dynamic_peak_threshold = std::max(config_.peak_threshold, signal_level_ * 0.6);
+    // Check if the middle point is a local maximum and meets slope/threshold requirements
     const bool rising_then_falling =
         ((b - a) > config_.peak_slope_threshold) && ((b - c) > config_.peak_slope_threshold);
     const bool local_peak = (b > a && b > c);
@@ -175,14 +190,16 @@ std::optional<double> HeartRateCalculator::tryDetectBeatLocked() {
 
     const double interval = now_sec - last_peak_time_sec_;
 
+    // Validate if the beat interval falls within realistic physiological ranges
     if (interval >= config_.min_beat_interval_sec && interval <= config_.max_beat_interval_sec) {
         const double bpm = 60.0 / interval;
 
+        // Prevent sudden erratic jumps in BPM readings
         if (latest_bpm_.has_value() && std::fabs(bpm - *latest_bpm_) > config_.max_bpm_jump) {
             last_peak_time_sec_ = now_sec;
             return std::nullopt;
         }
-
+        // Add to sliding window and calculate average BPM
         bpm_window_.push_back(bpm);
         if (bpm_window_.size() > config_.bpm_window_size) {
             bpm_window_.erase(bpm_window_.begin());
@@ -194,6 +211,7 @@ std::optional<double> HeartRateCalculator::tryDetectBeatLocked() {
         return latest_bpm_;
     }
 
+    // Reset reference time if the gap between peaks is too large
     if (interval > config_.max_beat_interval_sec) {
         last_peak_time_sec_ = now_sec;
     }
