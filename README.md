@@ -80,8 +80,7 @@ Based on our verified hardware design, connect the components as follows:
 
 ## 📌 Key Features
 - 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
-- 🎵 **Adaptive music selection** based on inferred physiological state.
-- 🧾 **Mood and HR logging** with time-stamped entries for trend analysis.
+- 🎵 **Adaptive music selection** based on BPM zones.
 - ⚙️ **Production-level C++** running on Raspberry Pi (Linux).
 
 
