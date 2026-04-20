@@ -8,22 +8,18 @@ works today", not only the PRD/ideal design.
 
 - `src/main.cpp`
   - Current realtime heart-rate monitor entrypoint (sensor + BPM calc + console output).
-  - Note: it does not yet connect BPM -> `MusicPlayer`.
+  - It connects the sensor, BPM calculation, console output, and audio playback.
 - `include/sensor.h` + `src/Sensor.cpp`
   - MAX30102 hardware driver (I2C + GPIO interrupt via libgpiod).
   - Exposes an event/callback API that pushes batches of `Sample`.
 - `include/HeartRateCalculator.h` + `src/HeartRateCalculator.cpp`
   - Lightweight BPM calculation from the MAX30102 IR channel.
   - Thread-safe getters for `fingerDetected()` and `getLatestBpm()`.
-- `include/MusicPlayer.h` + `src/MusicPlayer.cpp`
-  - Heart-rate driven music mode state machine + non-blocking crossfade engine.
-  - Audio backend is injected through `IAudioBackend` for testability.
+- `include/ZoneMusicPlayer.h + src/ZoneMusicPlayer.cpp`
+  - Zone-based music player driven by BPM ranges, with crossfades and track switching..
+  - Audio backend is injected through IAudioBackend for testability.
 - `include/SDL2AudioBackend.h`
   - Real audio backend implemented with SDL2 + SDL2_mixer (loads WAV, sets per-channel volume).
-- `src/demo_music_player.cpp`
-  - Minimal "bring-up" executable to test the player on Raspberry Pi without sensors.
-- `src/test_MusicPlayer.cpp`
-  - GoogleTest unit tests for `MusicPlayer` using a mock backend (no SDL2 required).
 - `include/I2C.h` + `tests/main.cpp`
   - Simple I2C register read/write helper and a small MAX30102 communication smoke test.
 - `include/dsp.h` + `src/dsp.cpp`
@@ -38,12 +34,12 @@ The intended end-to-end pipeline is:
 1. `Max30102Sensor` acquires data from the MAX30102 (event-driven via GPIO DRDY).
 2. Sensor pushes `std::vector<Sample>` to a callback (batch processing).
 3. `HeartRateCalculator` consumes `Sample.ir` and produces a stable BPM estimate.
-4. The app forwards BPM to `MusicPlayer::updateBPM(bpm)`.
-5. `MusicPlayer` decides mode transitions (CALM/ACTIVE) and triggers a 1-second crossfade.
-6. A concrete backend (e.g. `SDL2AudioBackend`) performs real playback and volume changes.
+4. The app forwards BPM to AudioService.
+5. AudioService forwards BPM to ZoneMusicPlayer::updateBPM(...).
+6. ZoneMusicPlayer maps BPM to zone1 ~ zone6 and performs crossfades when switching zones.
+7. SDL2AudioBackend performs the actual playback and volume changes.
 
-Today, `src/main.cpp` implements steps (1)-(3) and prints results; (4)-(6) are
-tested via `src/demo_music_player.cpp`.
+Today, src/main.cpp integrates the full sensor, BPM, console, and audio path.
 
 ## I/O map (what each module talks to)
 
@@ -93,11 +89,11 @@ Data ownership:
 - `samples` points to a `std::vector<Sample>` owned by the caller stack frame; it is only valid during the callback.
   If the application needs to store data, it should copy it.
 
-### 2) Music transition callback: `MusicPlayer::setTransitionCallback`
+### 2) Music transition callback: `ZoneMusicPlayer::setTransitionCallback`
 
 Signature (declared in `include/MusicPlayer.h`):
 
-- `void setTransitionCallback(std::function<void(MusicMode)> cb);`
+- `void setTransitionCallback(std::function<void(int zone)> cb);`
 
 Invocation (in `src/MusicPlayer.cpp`):
 
@@ -114,9 +110,9 @@ Thread context:
   - `Max30102Sensor::start()` spawns `reader_thread_` running `dataWorker()`.
   - `dataWorker()` blocks on `gpiod_line_request_wait_edge_events()` and calls `readFifo()` on edges.
 - Main thread:
-  - `src/main.cpp` registers a callback and periodically prints state.
-- Music crossfade thread:
-  - `MusicPlayer::crossfade()` spawns `m_worker` and runs `runCrossfade()` in the background.
+  - `src/main.cpp` registers callbacks and updates the console from a separate presenter thread.
+- Audio threads:
+  - ZoneMusicPlayer uses an internal event thread plus a worker thread for crossfades.
 
 Thread-safety notes:
 
@@ -159,7 +155,7 @@ Key class: `class HeartRateCalculator`
 
 - `explicit HeartRateCalculator(double sampleRateHz)`
   - Sets filter constants and thresholds.
-- `void processSamples(const std::vector<Sample>& samples)`
+- `void processIrSamples(const std::vector<float>& irSamples)`
   - Iterates over new samples and calls `processOne(s.ir)` under a mutex.
 - `std::optional<double> getLatestBpm() const`
   - Returns the latest averaged BPM (or empty if not enough data).
@@ -232,8 +228,7 @@ It is currently not integrated into the main pipeline.
 
 ## Entry points and how to run
 
-Because the repo currently has no `CMakeLists.txt`/`Makefile`, builds are done
-via direct `g++` commands.
+This project uses CMake for builds and tests.
 
 ### 1) Sensor + BPM console app (`src/main.cpp`)
 
@@ -249,14 +244,8 @@ sudo ./vibepulse_hr
 ### 2) Audio player bring-up (`src/demo_music_player.cpp`)
 
 ```bash
-sudo apt update
-sudo apt install -y g++ libsdl2-dev libsdl2-mixer-dev
-
-g++ -std=c++17 -Iinclude \
-  src/MusicPlayer.cpp src/demo_music_player.cpp \
-  -lSDL2 -lSDL2_mixer -pthread -o demo_music_player
-
-SDL_AUDIODRIVER=alsa ./demo_music_player calm.wav active.wav
+cmake -S . -B build
+cmake --build build
 ```
 
 ### 3) MusicPlayer unit tests (`src/test_MusicPlayer.cpp`)
