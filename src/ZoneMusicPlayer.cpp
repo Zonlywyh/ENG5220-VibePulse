@@ -51,6 +51,19 @@ bool ZoneMusicPlayer::loadZone(int zone, const std::vector<std::string>& paths) 
     return true;
 }
 
+bool ZoneMusicPlayer::loadZoneTracks(const std::array<std::string, kZoneCount>& paths) {
+    for (int z = 1; z <= kZoneCount; ++z) {
+        const auto& path = paths[z - 1];
+        if (path.empty()) {
+            return false;
+        }
+        if (!loadZone(z, std::vector<std::string>{path})) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // ─────────────────────────────────────────────────────────────
 //  BPM → zone
 // ─────────────────────────────────────────────────────────────

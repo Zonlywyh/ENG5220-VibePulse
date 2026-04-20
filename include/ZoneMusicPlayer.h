@@ -9,6 +9,7 @@
 
 #include <string>
 #include <vector>
+#include <array>
 #include <functional>
 #include <atomic>
 #include <thread>
@@ -43,6 +44,9 @@ public:
 
     // Load tracks for a zone (1..6). Supports multiple tracks per zone.
     bool loadZone(int zone, const std::vector<std::string>& paths);
+
+    // Convenience: load one track per zone (zone1..zone6).
+    bool loadZoneTracks(const std::array<std::string, kZoneCount>& paths);
 
     // Feed BPM updates from the heart-rate pipeline.
     void updateBPM(int bpm);
