@@ -1,11 +1,15 @@
-#pragma once
 /**
  * @file Sensor.h
  * @brief MAX30102 PPG sensor driver using libgpiod for event-driven DRDY handling.
- *
- * Notes:
- * - This header intentionally uses `#pragma once` to avoid header-guard merge issues.
+ * Provides realtime acquisition of PPG samples via blocking I/O (epoll on GPIO)
+ * and callback mechanism. 
+ * @note Adapted from:
+ *       - libgpiod official examples
+ *       - MAX30102 datasheet
  */
+
+#ifndef MAX30102_SENSOR_H
+#define MAX30102_SENSOR_H
 
 #include <gpiod.h>
 
@@ -13,64 +17,91 @@
 #include <chrono>
 #include <cstdint>
 #include <deque>
-#include <fcntl.h>
 #include <functional>
-#include <linux/i2c-dev.h>
 #include <mutex>
 #include <string>
-#include <sys/eventfd.h>
-#include <sys/ioctl.h>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
+/* Default configuration */
 constexpr int DEFAULT_I2C_BUS = 1;
 constexpr uint8_t DEFAULT_MAX30102_ADDRESS = 0x57;
 constexpr int DEFAULT_DRDY_GPIO = 27;
 constexpr int DEFAULT_DRDY_CHIP = 0;
 
+/* Register addresses */
 constexpr uint8_t REG_INTR_STATUS_1 = 0x00;
 constexpr uint8_t REG_INTR_STATUS_2 = 0x01;
 constexpr uint8_t REG_INTR_ENABLE_1 = 0x02;
 constexpr uint8_t REG_INTR_ENABLE_2 = 0x03;
-constexpr uint8_t REG_FIFO_WR_PTR = 0x04;
-constexpr uint8_t REG_OVF_COUNTER = 0x05;
-constexpr uint8_t REG_FIFO_RD_PTR = 0x06;
-constexpr uint8_t REG_FIFO_DATA = 0x07;
-constexpr uint8_t REG_FIFO_CONFIG = 0x08;
-constexpr uint8_t REG_MODE_CONFIG = 0x09;
-constexpr uint8_t REG_SPO2_CONFIG = 0x0A;
-constexpr uint8_t REG_LED1_PA = 0x0C;
-constexpr uint8_t REG_LED2_PA = 0x0D;
-constexpr uint8_t REG_TEMP_CONFIG = 0x21;
-constexpr uint8_t REG_PART_ID = 0xFF;
+constexpr uint8_t REG_FIFO_WR_PTR   = 0x04;
+constexpr uint8_t REG_OVF_COUNTER   = 0x05;
+constexpr uint8_t REG_FIFO_RD_PTR   = 0x06;
+constexpr uint8_t REG_FIFO_DATA     = 0x07;
+constexpr uint8_t REG_FIFO_CONFIG   = 0x08;
+constexpr uint8_t REG_MODE_CONFIG   = 0x09;
+constexpr uint8_t REG_SPO2_CONFIG   = 0x0A;
+constexpr uint8_t REG_LED1_PA       = 0x0C;
+constexpr uint8_t REG_LED2_PA       = 0x0D;
+constexpr uint8_t REG_TEMP_CONFIG   = 0x21;
+constexpr uint8_t REG_PART_ID       = 0xFF;
 
 constexpr int FIFO_DEPTH = 32;
 
+/** @brief Single PPG sample from Red and IR channels */
 struct Sample {
     float red = 0.0f;
     float ir = 0.0f;
 };
 
-enum SampleAverage { SAMPLEAVG_1 = 0, SAMPLEAVG_2 = 1, SAMPLEAVG_4 = 2, SAMPLEAVG_8 = 3, SAMPLEAVG_16 = 4, SAMPLEAVG_32 = 5 };
+/** @brief Sensor sampling averaging options */
+enum SampleAverage {
+    SAMPLEAVG_1  = 0,
+    SAMPLEAVG_2  = 1,
+    SAMPLEAVG_4  = 2,
+    SAMPLEAVG_8  = 3,
+    SAMPLEAVG_16 = 4,
+    SAMPLEAVG_32 = 5
+};
 
+/** @brief Sensor sampling rate options */
 enum SampleRate {
-    SAMPLERATE_50 = 0,
-    SAMPLERATE_100 = 1,
-    SAMPLERATE_200 = 2,
-    SAMPLERATE_400 = 3,
-    SAMPLERATE_800 = 4,
+    SAMPLERATE_50   = 0,
+    SAMPLERATE_100  = 1,
+    SAMPLERATE_200  = 2,
+    SAMPLERATE_400  = 3,
+    SAMPLERATE_800  = 4,
     SAMPLERATE_1000 = 5,
     SAMPLERATE_1600 = 6,
     SAMPLERATE_3200 = 7
 };
 
-enum LedPulseWidth { PULSEWIDTH_69 = 0, PULSEWIDTH_118 = 1, PULSEWIDTH_215 = 2, PULSEWIDTH_411 = 3 };
+/** @brief LED pulse width options */
+enum LedPulseWidth {
+    PULSEWIDTH_69  = 0,
+    PULSEWIDTH_118 = 1,
+    PULSEWIDTH_215 = 2,
+    PULSEWIDTH_411 = 3
+};
 
-enum class SensorStatus { UNINITIALIZED, READY, RUNNING, ERROR };
+/** @brief Sensor operational status */
+enum class SensorStatus {
+    UNINITIALIZED,
+    READY,
+    RUNNING,
+    ERROR
+};
 
+/**
+ * @class Max30102Sensor
+ * @brief Main driver for MAX30102 PPG sensor.
+ *
+ * Single responsibility: acquire raw samples via I2C and GPIO DRDY
+ * using blocking I/O and notify via callback. All data is private.
+ */
 class Max30102Sensor {
 public:
+/** @brief Callback type for new PPG samples */
     using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
 
     Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO,
@@ -84,9 +115,6 @@ public:
     void stop();
     void setDataCallback(DataCallback cb);
 
-    SensorStatus getStatus() const;
-    std::string getLastError() const;
-
     bool checkPartID();
     bool configureSensor(SampleAverage avg = SAMPLEAVG_4,
                          SampleRate rate = SAMPLERATE_100,
@@ -94,11 +122,25 @@ public:
 
     std::vector<Sample> getLatestSamples(size_t maxCount = 100) const;
 
+    /**
+     * @brief Get current sensor status (thread-safe, lock-free).
+     */
+    SensorStatus getStatus() const;
+
+    /**
+     * @brief Get last error message if any.
+     */
+    std::string getLastError() const;
+
 private:
     void dataWorker();
     void readFifo();
     void writeRegister(uint8_t reg, uint8_t value);
     uint8_t readRegister(uint8_t reg);
+
+    /**
+     * @brief Internal helper to update status (called from various places).
+     */
     void setStatus(SensorStatus s, const std::string& err = "");
 
 private:
@@ -106,11 +148,11 @@ private:
     int wake_fd_ = -1;
     int interrupt_pin_;
     mutable std::mutex mutex_;
-    std::atomic<bool> running_{false};
 
-    mutable std::mutex error_mutex_;
-    SensorStatus status_{SensorStatus::UNINITIALIZED};
+    std::atomic<bool> running_{false};
+    std::atomic<SensorStatus> status_{SensorStatus::UNINITIALIZED};
     std::string last_error_;
+    mutable std::mutex error_mutex_;         
 
     std::deque<Sample> sample_buffer_;
     DataCallback data_callback_;
@@ -126,3 +168,4 @@ private:
     struct gpiod_line_request* line_request_ = nullptr;
 };
 
+#endif // MAX30102_SENSOR_H

@@ -9,11 +9,11 @@
 
 struct HeartRateConfig {
     double dc_alpha = 0.95;
-    double smooth_alpha = 0.70;
+    double smooth_alpha = 0.72;
     double ir_level_alpha = 0.92;
     double finger_enter_threshold = 0.05;
-    double finger_exit_threshold = 0.02;
-    double peak_threshold = 0.0010;
+    double finger_exit_threshold = 0.020;
+    double peak_threshold = 0.001;
     double signal_level_alpha = 0.92;
     double peak_slope_threshold = 0.00015;
     double min_beat_interval_sec = 0.50;
@@ -22,68 +22,25 @@ struct HeartRateConfig {
     size_t required_present_samples = 6;
     size_t required_absent_samples = 12;
     size_t bpm_window_size = 5;
+
 };
+
+
 
 class HeartRateCalculator {
 public:
-    /**
-     * Creates a heart-rate calculator for a fixed input sampling frequency.
-     *
-     * @param sampleRateHz Number of IR samples processed per second.
-     */
     explicit HeartRateCalculator(double sampleRateHz, HeartRateConfig config = {});
 
-    /**
-     * Processes one IR sample from the sensor.
-     *
-     * @param ir Normalized IR sample value.
-     */
     void processIrSample(float ir);
-
-    /**
-     * Processes a batch of IR samples in capture order.
-     *
-     * @param irSamples Sequence of normalized IR sample values.
-     */
     void processIrSamples(const std::vector<float>& irSamples);
 
-    /**
-     * Registers a callback fired whenever a new BPM estimate is available.
-     *
-     * @param cb Callback receiving the filtered BPM estimate.
-     */
     void setBpmCallback(std::function<void(double)> cb);
-
-    /**
-     * Registers a callback fired when finger presence changes.
-     *
-     * @param cb Callback receiving true when a finger is detected.
-     */
     void setFingerStateCallback(std::function<void(bool)> cb);
 
-    /**
-     * Returns the most recent BPM estimate, if available.
-     */
     std::optional<double> getLatestBpm() const;
-
-    /**
-     * Returns whether a finger is currently considered present.
-     */
     bool fingerDetected() const;
-
-    /**
-     * Returns whether any IR sample has been processed.
-     */
     bool hasSamples() const;
-
-    /**
-     * Returns the smoothed IR level used for finger detection.
-     */
     double getIrLevel() const;
-
-    /**
-     * Returns the latest raw IR sample processed by the estimator.
-     */
     double getLatestRawIr() const;
 
 private:
@@ -98,7 +55,6 @@ private:
     std::optional<double> tryDetectBeatLocked();
     void resetState(float ir);
 
-private:
     double sample_rate_hz_;
     HeartRateConfig config_;
     mutable std::mutex mutex_;
