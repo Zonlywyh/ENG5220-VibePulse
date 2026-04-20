@@ -95,7 +95,7 @@ Based on our verified hardware design, connect the components as follows:
 | :--- | :--- |
 | **Yanyan Yang** (3155877Y) | Developed core **Digital Signal Processing (DSP)** modules, including **noise filtering algorithms** (e.g., Moving Average/Butterworth) and high-precision **peak detection logic** to ensure signal integrity. |
 | **Mengfei Nan** (3154547N) | Focused on **sensor integration**, fine-tuning **I2C protocol communication** for lower error rates, and managing physical wiring/circuit reliability. |
-| **[Name]** ([ID]) | 11111111111111111 |
+| **Yunhan Wang** (3141733) | Led the music playback module, implementing track switching/transition logic (e.g., zone/BPM-driven selection and smooth crossfades) and managing version control workflows (branching, commits, merges)|
 | **[Name]** ([ID])  | 1111111111 |
 | **[Name]** ([ID]) | 1111111111 |
 
