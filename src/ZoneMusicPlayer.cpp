@@ -3,9 +3,6 @@
 // ============================================================
 
 #include "../include/ZoneMusicPlayer.h"
-
-#include <algorithm>
-#include <chrono>
 #include <stdexcept>
 
 namespace {
@@ -94,6 +91,18 @@ void ZoneMusicPlayer::setZone(int zone) {
     enqueueEvent(EventType::ZoneChange, zone);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  BPM → zone
+// ─────────────────────────────────────────────────────────────
+void ZoneMusicPlayer::updateBPM(int bpm) {
+    int target = bpmToZone(bpm);
+    if (target != m_currentZone.load())
+        setZone(target);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Track path accessors
+// ─────────────────────────────────────────────────────────────
 std::optional<std::string> ZoneMusicPlayer::currentTrackPath() const {
     std::lock_guard<std::mutex> lk(m_pathMutex);
     if (m_currentTrackPath.empty()) {
@@ -315,6 +324,8 @@ void ZoneMusicPlayer::runCrossfade(int hOut, int hIn, int next) {
             m_crossfading.store(false);
             return;
         }
+        int volIn  = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
+        int volOut = 128 - volIn;
 
         const int volIn = static_cast<int>((128.0f * step) / CROSSFADE_STEPS);
         const int volOut = 128 - volIn;
