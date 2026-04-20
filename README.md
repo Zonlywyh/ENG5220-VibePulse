@@ -128,9 +128,20 @@ Based on our verified hardware design, connect the components as follows:
    cd ENG5220-VibePulse
 2. Build (CMake)
     ```bash
-   mkdir build && cd build
-   cmake -S . -B build
-   make -j4 # Production build with unit tests
+   mkdir build
+    cmake -S . -B build
+    cmake --build build
+3. Run
+    ```bash
+    ./build/vibepulse_hr
+4. (If need)Test
+    ```bash
+    cmake -S . -B build -DBUILD_TESTING=ON
+    cmake --build build -j
+    ctest --test-dir build -N
+    ctest --test-dir build --output-on-failure
+    
+
 ## 🚀 References & Acknowledgements
 
 ### External Libraries and Sources
