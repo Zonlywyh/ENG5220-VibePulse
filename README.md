@@ -36,7 +36,7 @@ University of Glasgow — ENG 5220: Real Time Embedded Programming Team Project
 VibePulse is a professional-grade, **event-driven embedded system** built on Linux (Raspberry Pi). It solves the real-world challenge of physiological state management by continuously monitoring heart-rate signals (PPG), inferring stress/relaxation states, and dynamically adapting music playback in realtime.
 
 ## 🧠 Real-Time Implementation & DSP
-*In accordance with ENG 5220 marking criteria, this project strictly avoids polling to ensure high responsiveness.*
+*In accordance with ENG 5220 marking criteria, this project is mainly event-driven and uses callbacks, blocking I/O, and worker threads to ensure high responsiveness.*
 
 * **Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
 * **Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
@@ -93,7 +93,7 @@ Based on our verified hardware design, connect the components as follows:
 
 | Member  | Key Responsibilities & Contributions |
 | :--- | :--- |
-| **Yanyan Yang** (3155877Y) | Developed core **Digital Signal Processing (DSP)** modules, including **noise filtering algorithms** (e.g., Moving Average/Butterworth) and high-precision **peak detection logic** to ensure signal integrity. |
+| **Yanyan Yang** (3155877Y) | Developed core heart-rate signal processing logic, including filtering, smoothing, and peak detection and high-precision **peak detection logic** to ensure signal integrity. |
 | **Mengfei Nan** (3154547N) | Focused on **sensor integration**, fine-tuning **I2C protocol communication** for lower error rates, and managing physical wiring/circuit reliability. |
 | **Yunhan Wang** (3141733) | Led the music playback module, implementing track switching/transition logic (e.g., zone/BPM-driven selection and smooth crossfades) and managing version control workflows (branching, commits, merges)|
 | **Qingkai Cao** (3078346C)  | Focused on MAX30102 sensor integration, building an event-driven, multi-threaded acquisition pipeline (GPIO DRDY + I2C FIFO reads), improving I2C communication stability error handling, and exposing callback-based data delivery for the heart-rate processing module.  |
