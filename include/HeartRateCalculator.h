@@ -9,11 +9,11 @@
 
 struct HeartRateConfig {
     double dc_alpha = 0.95;
-    double smooth_alpha = 0.70;
+    double smooth_alpha = 0.72;
     double ir_level_alpha = 0.92;
     double finger_enter_threshold = 0.05;
-    double finger_exit_threshold = 0.02;
-    double peak_threshold = 0.0010;
+    double finger_exit_threshold = 0.020;
+    double peak_threshold = 0.001;
     double signal_level_alpha = 0.92;
     double peak_slope_threshold = 0.00015;
     double min_beat_interval_sec = 0.50;
@@ -22,7 +22,10 @@ struct HeartRateConfig {
     size_t required_present_samples = 6;
     size_t required_absent_samples = 12;
     size_t bpm_window_size = 5;
+
 };
+
+
 
 class HeartRateCalculator {
 public:

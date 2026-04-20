@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
+#include <functional>
 
 struct MockBackend : public IAudioBackend {
     struct Call { std::string op; int a = 0; int b = 0; };
@@ -18,6 +19,7 @@ struct MockBackend : public IAudioBackend {
     int  loadFails   = 0;
 
     std::atomic<int> finishedHandle{-1};
+    std::function<void(int)> finishedCallback;
 
     int  loadTrack(const std::string&) override {
         if (loadFails-- > 0) return -1;
@@ -31,6 +33,16 @@ struct MockBackend : public IAudioBackend {
     void halt(int id)               override { log.push_back({"halt", id}); }
     bool isReady() const            override { return ready; }
     bool isFinished(int id) const   override { return finishedHandle.load() == id; }
+    void setTrackFinishedCallback(std::function<void(int)> cb) override {
+        finishedCallback = std::move(cb);
+    }
+
+    void finishTrack(int id) {
+        finishedHandle.store(id);
+        if (finishedCallback) {
+            finishedCallback(id);
+        }
+    }
 
     int countCalls(const std::string& op) const {
         int n = 0;
@@ -155,13 +167,14 @@ TEST_F(MusicPlayerTest, CrossfadeNoopWhenBackendNotReady) {
 
 TEST_F(MusicPlayerTest, AutoAdvancesWhenTrackFinishes) {
     int playsBefore = mock->countCalls("play");
-    mock->finishedHandle.store(0);
+    mock->finishTrack(0);
 
     auto deadline = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(1000);
     while (mock->countCalls("play") == playsBefore &&
-           std::chrono::steady_clock::now() < deadline)
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
 
     EXPECT_GT(mock->countCalls("play"), playsBefore);
     EXPECT_EQ(player->currentZone(), 1);

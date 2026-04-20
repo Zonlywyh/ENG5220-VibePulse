@@ -19,7 +19,6 @@ option(VIBEPULSE_ENABLE_AUDIO "Enable SDL2/SDL2_mixer audio playback" ON)
 
 # ── Core music player library (portable, unit-test friendly) ──
 add_library(vibepulse_core
-    src/MusicPlayer.cpp
     src/ZoneMusicPlayer.cpp
 )
 target_compile_features(vibepulse_core PUBLIC cxx_std_17)

@@ -57,8 +57,11 @@ enum class MonitorState {
 
 struct AudioSnapshot {
     bool available = false;
+    std::optional<int> current_zone;
+    std::optional<int> target_zone;
     std::optional<std::string> current_track;
     std::optional<std::string> target_track;
+    std::optional<std::string> transition_message;
 };
 
 // Unified application state shared by the heart-rate pipeline,
@@ -109,12 +112,9 @@ public:
     }
 
     AppSnapshot waitForUpdate(std::uint64_t last_seen_version,
-                              std::chrono::steady_clock::time_point deadline,
                               bool& changed) {
         std::unique_lock<std::mutex> lock(mutex_);
-        // Wake up either when a producer publishes a newer snapshot or when a
-        // periodic refresh deadline is reached.
-        cv_.wait_until(lock, deadline, [&] {
+        cv_.wait(lock, [&] {
             return stop_requested_ || version_ != last_seen_version;
         });
 
@@ -220,6 +220,9 @@ private:
             snapshot.audio.target_track != snapshot.audio.current_track) {
             status_message += " -> " + *snapshot.audio.target_track;
         }
+        if (snapshot.audio.transition_message.has_value()) {
+            status_message += " | " + *snapshot.audio.transition_message;
+        }
 
         return status_message;
     }
@@ -250,7 +253,7 @@ private:
         }
     }
 
-    void publish(const AppSnapshot& snapshot, bool periodic_refresh) {
+    void publish(const AppSnapshot& snapshot) {
         const auto now = std::chrono::steady_clock::now();
         const MonitorState state = determineState(snapshot);
         const std::string status_message = makeStatusMessage(snapshot);
@@ -258,7 +261,7 @@ private:
         const bool message_changed = status_message != last_status_;
         const bool bpm_changed = snapshot.bpm != last_bpm_;
 
-        if (!state_changed && !message_changed && !bpm_changed && !periodic_refresh) {
+        if (!state_changed && !message_changed && !bpm_changed) {
             return;
         }
 
@@ -276,35 +279,25 @@ private:
         last_bpm_ = snapshot.bpm;
         last_state_ = state;
         last_output_time_ = now;
-        last_publish_time_ = now;
     }
 
-    // Wait for either a real state update or a periodic refresh deadline,
-    // then publish the latest snapshot to the console.
-    //
-    // This worker thread is the consumer side of the event-driven pipeline:
-    // callbacks publish state, this thread wakes on the condition variable,
-    // and only then performs the slower console formatting and I/O.
+    // Wait for a real state update, then publish the latest snapshot to the
+    // console. This keeps presentation event-driven as well: no periodic
+    // refresh loop, only producer-driven wakeups or an explicit stop signal.
     void run() {
         std::uint64_t seen_version = state_store_.version();
 
         while (!stop_requested_.load()) {
-            const auto refresh_interval =
-                (last_state_.has_value() && *last_state_ == MonitorState::HeartRateReady)
-                    ? std::chrono::milliseconds(800)
-                    : std::chrono::seconds(3);
-            const auto deadline = last_publish_time_ + refresh_interval;
-
             bool changed = false;
-            const AppSnapshot snapshot = state_store_.waitForUpdate(seen_version, deadline, changed);
+            const AppSnapshot snapshot = state_store_.waitForUpdate(seen_version, changed);
             if (stop_requested_.load()) {
                 break;
             }
 
-            const auto now = std::chrono::steady_clock::now();
-            const bool periodic_refresh = now >= deadline;
             seen_version = state_store_.version();
-            publish(snapshot, periodic_refresh && !changed);
+            if (changed) {
+                publish(snapshot);
+            }
         }
     }
 
@@ -314,8 +307,6 @@ private:
     std::optional<MonitorState> last_state_;
     std::string last_status_;
     std::optional<int> last_bpm_;
-    std::chrono::steady_clock::time_point last_publish_time_ =
-        std::chrono::steady_clock::now() - std::chrono::seconds(10);
     std::chrono::steady_clock::time_point last_output_time_ = std::chrono::steady_clock::now();
     std::optional<std::chrono::steady_clock::time_point> last_no_finger_time_;
     std::optional<std::chrono::steady_clock::time_point> last_measuring_time_;
@@ -341,14 +332,14 @@ public:
             }
         }
 
-        auto pick_zone_wav = [&](int zone) -> std::optional<std::string> {
+        auto list_zone_wavs = [&](int zone) -> std::vector<std::string> {
             namespace fs = std::filesystem;
             const fs::path dir = fs::path(music_root) / ("zone" + std::to_string(zone));
             std::vector<fs::path> wavs;
             std::error_code ec;
 
             if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
-                return std::nullopt;
+                return {};
             }
 
             for (const auto& entry : fs::directory_iterator(dir, ec)) {
@@ -364,12 +355,13 @@ public:
                 }
             }
 
-            if (wavs.empty()) {
-                return std::nullopt;
-            }
-
             std::sort(wavs.begin(), wavs.end());
-            return wavs.front().string();
+            std::vector<std::string> result;
+            result.reserve(wavs.size());
+            for (const auto& wav : wavs) {
+                result.push_back(wav.string());
+            }
+            return result;
         };
 
         try {
@@ -378,29 +370,39 @@ public:
             std::cout << "[AUDIO] creating zone player" << std::endl;
             zone_player_ = std::make_unique<ZoneMusicPlayer>(backend);
 
-            std::array<std::string, ZoneMusicPlayer::kZoneCount> paths{};
             bool ok = true;
             for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                auto path = pick_zone_wav(z);
-                if (!path.has_value()) {
+                const auto paths = list_zone_wavs(z);
+                if (paths.empty()) {
                     std::cerr << "[AUDIO] Missing .wav in: "
                               << (music_root + "/zone" + std::to_string(z)) << std::endl;
                     ok = false;
                     break;
                 }
-                paths[z - 1] = *path;
+                zone_tracks_[z - 1] = paths;
             }
 
             std::cout << "[AUDIO] loading zone tracks" << std::endl;
-            if (ok && !zone_player_->loadZoneTracks(paths)) {
+            if (ok) {
+                for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
+                    if (!zone_player_->loadZone(z, zone_tracks_[z - 1])) {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!ok) {
                 std::cerr << "[AUDIO] Failed to load zone tracks. Check WAV format/paths." << std::endl;
                 zone_player_.reset();
             } else if (zone_player_) {
                 std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
                 for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                    std::cout << "[AUDIO] zone" << z << " -> " << paths[z - 1] << std::endl;
+                    for (const auto& path : zone_tracks_[z - 1]) {
+                        std::cout << "[AUDIO] zone" << z << " -> " << path << std::endl;
+                    }
                 }
-                std::cout << "[AUDIO] initial -> zone1 -> " << paths[0] << std::endl;
+                std::cout << "[AUDIO] initial -> zone1 -> " << zone_tracks_[0].front() << std::endl;
 
                 // Audio crossfades are asynchronous inside ZoneMusicPlayer.
                 // When a transition completes, the callback republishes the
@@ -421,10 +423,26 @@ public:
         if (!zone_player_) {
             return;
         }
+        const int previous_zone = zone_player_->currentZone();
+        const int next_zone = bpmToZone(bpm);
+        if (next_zone != previous_zone) {
+            std::string change = "heart rate changed";
+            if (last_bpm_.has_value()) {
+                if (bpm > *last_bpm_) {
+                    change = "heart rate faster";
+                } else if (bpm < *last_bpm_) {
+                    change = "heart rate slower";
+                }
+            }
+            pending_transition_message_ =
+                "zone" + std::to_string(previous_zone) + " -> zone" + std::to_string(next_zone) +
+                " (" + change + ")";
+        }
         // BPM updates arrive from the heart-rate callback path. AudioService
         // forwards them to the player, which decides whether a zone switch
         // should start based on its own debounce/crossfade rules.
         zone_player_->updateBPM(bpm);
+        last_bpm_ = bpm;
         publishAudioSnapshot();
     }
 
@@ -434,11 +452,15 @@ private:
         snapshot.available = zone_player_ != nullptr;
 
         if (zone_player_) {
+            snapshot.current_zone = zone_player_->currentZone();
+            snapshot.target_zone = zone_player_->targetZone();
             snapshot.current_track = trackStem(zone_player_->currentTrackPath());
             snapshot.target_track = trackStem(zone_player_->targetTrackPath());
+            snapshot.transition_message = pending_transition_message_;
         }
 
         state_store_.setAudioSnapshot(snapshot);
+        pending_transition_message_.reset();
     }
 
     static std::optional<std::string> trackStem(const std::optional<std::string>& path) {
@@ -455,6 +477,9 @@ private:
 
     AppStateStore& state_store_;
     std::unique_ptr<ZoneMusicPlayer> zone_player_;
+    std::array<std::vector<std::string>, ZoneMusicPlayer::kZoneCount> zone_tracks_{};
+    std::optional<int> last_bpm_;
+    std::optional<std::string> pending_transition_message_;
 };
 #else
 class AudioService {

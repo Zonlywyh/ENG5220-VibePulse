@@ -15,6 +15,7 @@ MusicPlayer::MusicPlayer(std::shared_ptr<IAudioBackend> backend)
 MusicPlayer::~MusicPlayer()
 {
     m_stopRequested.store(true);
+    m_waitCv.notify_all();
     if (m_worker.joinable()) {
         m_worker.join();
     }
@@ -107,6 +108,7 @@ void MusicPlayer::crossfade(MusicMode nextMode)
     }
 
     m_stopRequested.store(true);
+    m_waitCv.notify_all();
     if (m_worker.joinable()) {
         m_worker.join();
     }
@@ -141,7 +143,10 @@ void MusicPlayer::runCrossfade(MusicMode from, MusicMode to)
         m_backend->setVolume(inHandle, inVol);
         m_backend->setVolume(outHandle, outVol);
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(CROSSFADE_STEP_MS));
+        std::unique_lock<std::mutex> lock(m_waitMutex);
+        m_waitCv.wait_for(lock, std::chrono::milliseconds(CROSSFADE_STEP_MS), [this] {
+            return m_stopRequested.load();
+        });
     }
 
     m_currentMode.store(to);
@@ -150,4 +155,3 @@ void MusicPlayer::runCrossfade(MusicMode from, MusicMode to)
         m_onTransition(to);
     }
 }
-
