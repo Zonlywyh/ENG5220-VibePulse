@@ -36,7 +36,7 @@ University of Glasgow — ENG 5220: Real Time Embedded Programming Team Project
 VibePulse is a professional-grade, **event-driven embedded system** built on Linux (Raspberry Pi). It solves the real-world challenge of physiological state management by continuously monitoring heart-rate signals (PPG), inferring stress/relaxation states, and dynamically adapting music playback in realtime.
 
 ## 🧠 Real-Time Implementation & DSP
-*In accordance with ENG 5220 marking criteria, this project strictly avoids polling to ensure high responsiveness.*
+*In accordance with ENG 5220 marking criteria, this project is mainly event-driven and uses callbacks, blocking I/O, and worker threads to ensure high responsiveness.*
 
 * **Event-Driven Architecture**: Processing is triggered by hardware events and handled via **asynchronous callbacks** and **timers**.
 * **Multithreading**: We employ thread-based event handling (waking up threads) to ensure the system remains responsive, preventing the software from entering an unresponsive wait state.
@@ -54,6 +54,9 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 * **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
 
+### . Hardware Rationale
+* **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
+* **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
 ## 🔌 Hardware Configuration & Reproducibility
 *To ensure project reproducibility, the hardware setup follows the professional schematic below.*
 
@@ -75,11 +78,14 @@ Based on our verified hardware design, connect the components as follows:
 * **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
 
 
+## 🗂️ Code Architecture
+
+For a detailed breakdown of the project's file structure and module responsibilities, see [`CODE_ARCHITECTURE.md`](docs/CODE_ARCHITECTURE.md).
+
 
 ## 📌 Key Features
 - 📈 **Realtime heart-rate sampling** with event-triggered peak detection.
-- 🎵 **Adaptive music selection** based on inferred physiological state.
-- 🧾 **Mood and HR logging** with time-stamped entries for trend analysis.
+- 🎵 **Adaptive music selection** based on BPM zones.
 - ⚙️ **Production-level C++** running on Raspberry Pi (Linux).
 
 
@@ -88,11 +94,18 @@ Based on our verified hardware design, connect the components as follows:
 
 * **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
 * **Labor Division**:
-  * **Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
-  * **Lei Yi (2980190Y) (DSP Lead)**: Signal filtering algorithms and heart‑rate detection logic.
-  * **Mengfei Nan （StudentID:3154547N） (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
-  * **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
-  * **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
+
+| Member  | Key Responsibilities & Contributions |
+| :--- | :--- |
+| **Yanyan Yang** (3155877Y) | Developed core heart-rate signal processing logic, including filtering, smoothing, and peak detection and high-precision **peak detection logic** to ensure signal integrity. |
+| **Mengfei Nan** (3154547N) | Focused on **sensor integration**, fine-tuning **I2C protocol communication** for lower error rates, and managing physical wiring/circuit reliability. |
+| **Yunhan Wang** (3141733) | Led the music playback module, implementing track switching/transition logic (e.g., zone/BPM-driven selection and smooth crossfades) and managing version control workflows (branching, commits, merges)|
+| **Qingkai Cao** (3078346C)  | Focused on MAX30102 sensor integration, building an event-driven, multi-threaded acquisition pipeline (GPIO DRDY + I2C FIFO reads), improving I2C communication stability error handling, and exposing callback-based data delivery for the heart-rate processing module.  |
+| **Lei Yi** ([2980190Y]) | I was responsible for the heart-rate calculation logic, integrating the different modules into the main function, and carrying out part of the testing and debugging work. |
+
+---
+
+
 
 
 ## 📢 Social Media & Promotion
@@ -118,9 +131,36 @@ Based on our verified hardware design, connect the components as follows:
    ```bash
    git clone [https://github.com/Zonlywyh/ENG5220-VibePulse.git](https://github.com/Zonlywyh/ENG5220-VibePulse.git)
    cd ENG5220-VibePulse
-   mkdir build && cd build
 2. Build (CMake)
     ```bash
-   mkdir build && cd build
-   cmake ..
-   make -j4 # Production build with unit tests
+    #maybe need
+    sudo apt install libsdl2-dev  libgpiod-dev cmake libgtest-dev  i2c-tools  libsdl2-mixer-dev
+    mkdir build
+    cmake -S . -B build
+    cmake --build build
+3. Run
+    ```bash
+    ./build/vibepulse_hr
+4. (If need)Test
+    ```bash
+    cmake -S . -B build -DBUILD_TESTING=ON
+    cmake --build build -j
+    ctest --test-dir build -N
+    ctest --test-dir build --output-on-failure
+
+
+## 🚀 References & Acknowledgements
+
+### External Libraries and Sources
+
+| Component                  | License                  | Usage in Project                                      | Official Source |
+|----------------------------|--------------------------|-------------------------------------------------------|-----------------|
+| **libgpiod**               | GPL-2.0-or-later        | GPIO DRDY event handling with epoll                   | [git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git](https://git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git) (GitHub mirror: [brgl/libgpiod](https://github.com/brgl/libgpiod)) |
+| **SDL2 + SDL2_mixer**      | zlib license            | Audio playback, crossfade and zone-based music        | [libsdl-org/SDL_mixer](https://github.com/libsdl-org/SDL_mixer) |
+| **Linux POSIX APIs**       | Linux / POSIX standard  | `open()`, `read()`, `write()`, `ioctl()`, `eventfd`, `epoll` | Standard Linux system interfaces |
+| **MAX30102**               | —                       | Sensor register map and configuration                 | [MAX30102 Datasheet (Analog Devices)](https://www.analog.com/media/en/technical-documentation/data-sheets/MAX30102.pdf) |
+
+### Course Material 
+
+- The **event-driven realtime framework** (blocking I/O + callbacks + threads) is based on example code and lecture material provided by **Prof. Bernd Porr**.
+- Repository: [berndporr/realtime_cpp_coding](https://github.com/berndporr/realtime_cpp_coding)
