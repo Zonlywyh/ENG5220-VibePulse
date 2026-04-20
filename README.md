@@ -97,7 +97,7 @@ Based on our verified hardware design, connect the components as follows:
 | **Mengfei Nan** (3154547N) | Focused on **sensor integration**, fine-tuning **I2C protocol communication** for lower error rates, and managing physical wiring/circuit reliability. |
 | **Yunhan Wang** (3141733) | Led the music playback module, implementing track switching/transition logic (e.g., zone/BPM-driven selection and smooth crossfades) and managing version control workflows (branching, commits, merges)|
 | **Qingkai Cao** (3078346C)  | Focused on MAX30102 sensor integration, building an event-driven, multi-threaded acquisition pipeline (GPIO DRDY + I2C FIFO reads), improving I2C communication stability error handling, and exposing callback-based data delivery for the heart-rate processing module.  |
-| **[Name]** ([ID]) | 1111111111 |
+| **Lei Yi** ([2980190Y]) | I was responsible for the heart-rate calculation logic, integrating the different modules into the main function, and carrying out part of the testing and debugging work. |
 
 ---
 
