@@ -53,6 +53,7 @@ VibePulse is a professional-grade, **event-driven embedded system** built on Lin
 * **Encapsulation**: Internal data is strictly private. We use safe getters, setters, and callback interfaces to manage data flow between threads without memory leaks.
 * **Failsafe Design**: The application is designed to be leak-free, ensuring it can run as a standalone embedded product upon boot-up.
 
+
 ### . Hardware Rationale
 * **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
 * **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
@@ -76,6 +77,10 @@ Based on our verified hardware design, connect the components as follows:
 * **I2C Protocol**: We utilized the RPi 5's dedicated I2C pins (GPIO 2/3) for high-speed, reliable sensor data acquisition.
 * **Voltage Regulation**: The system is designed to run on the 3.3V rail to ensure signal integrity and protect the sensor's long-term reliability.
 
+
+## 🗂️ Code Architecture
+
+For a detailed breakdown of the project's file structure and module responsibilities, see [`CODE_ARCHITECTURE.md`](docs/CODE_ARCHITECTURE.md).
 
 
 ## 📌 Key Features
@@ -128,7 +133,9 @@ Based on our verified hardware design, connect the components as follows:
    cd ENG5220-VibePulse
 2. Build (CMake)
     ```bash
-   mkdir build
+    #maybe need
+    sudo apt install libsdl2-dev  libgpiod-dev cmake libgtest-dev  i2c-tools  libsdl2-mixer-dev
+    mkdir build
     cmake -S . -B build
     cmake --build build
 3. Run
@@ -140,7 +147,7 @@ Based on our verified hardware design, connect the components as follows:
     cmake --build build -j
     ctest --test-dir build -N
     ctest --test-dir build --output-on-failure
-    
+
 
 ## 🚀 References & Acknowledgements
 
