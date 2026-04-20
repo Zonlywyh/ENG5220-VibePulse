@@ -126,3 +126,18 @@ Based on our verified hardware design, connect the components as follows:
    mkdir build && cd build
    cmake ..
    make -j4 # Production build with unit tests
+## References & Acknowledgements
+
+### External Libraries and Sources
+
+| Component                  | License                  | Usage in Project                                      | Official Source |
+|----------------------------|--------------------------|-------------------------------------------------------|-----------------|
+| **libgpiod**               | GPL-2.0-or-later        | GPIO DRDY event handling with epoll                   | [git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git](https://git.kernel.org/pub/scm/libs/libgpiod/libgpiod.git) (GitHub mirror: [brgl/libgpiod](https://github.com/brgl/libgpiod)) |
+| **SDL2 + SDL2_mixer**      | zlib license            | Audio playback, crossfade and zone-based music        | [libsdl-org/SDL_mixer](https://github.com/libsdl-org/SDL_mixer) |
+| **Linux POSIX APIs**       | Linux / POSIX standard  | `open()`, `read()`, `write()`, `ioctl()`, `eventfd`, `epoll` | Standard Linux system interfaces |
+| **MAX30102**               | —                       | Sensor register map and configuration                 | [MAX30102 Datasheet (Analog Devices)](https://www.analog.com/media/en/technical-documentation/data-sheets/MAX30102.pdf) |
+
+### Course Material 
+
+- The **event-driven realtime framework** (blocking I/O + callbacks + threads) is based on example code and lecture material provided by **Prof. Bernd Porr**.
+- Repository: [berndporr/realtime_cpp_coding](https://github.com/berndporr/realtime_cpp_coding)
