@@ -1,0 +1,110 @@
+
+<style>
+  .wrap { padding: 1rem 0; font-family: var(--font-sans); }
+  .section { margin-bottom: 1.5rem; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+  .sec-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--color-background-secondary); }
+  .sec-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+  .sec-weight { font-size: 12px; color: var(--color-text-secondary); }
+  .grade-badge { font-size: 13px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+  .grade-a { background: #EAF3DE; color: #3B6D11; }
+  .grade-b { background: #E6F1FB; color: #185FA5; }
+  .grade-c { background: #FAEEDA; color: #854F0B; }
+  .grade-up { background: #EAF3DE; color: #3B6D11; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-left: 6px; }
+  .grade-same { background: #F1EFE8; color: #5F5E5A; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-left: 6px; }
+  .item { display: flex; align-items: flex-start; gap: 10px; padding: 0.6rem 1rem; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .dot-good { background: #639922; }
+  .dot-warn { background: #BA7517; }
+  .dot-bad { background: #E24B4A; }
+  .dot-new { background: #185FA5; }
+  .item-text { color: var(--color-text-primary); line-height: 1.5; flex: 1; }
+  .item-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-left: 4px; font-weight: 500; display: inline-block; }
+  .tag-fix { background: #FCEBEB; color: #A32D2D; }
+  .tag-new { background: #E6F1FB; color: #185FA5; }
+  .tag-ok { background: #EAF3DE; color: #3B6D11; }
+  .tag-warn { background: #FAEEDA; color: #854F0B; }
+  .summary-bar { display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+  .scard { flex: 1; min-width: 100px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.6rem 0.75rem; }
+  .scard-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 2px; }
+  .scard-val { font-size: 18px; font-weight: 500; color: var(--color-text-primary); }
+  .scard-delta { font-size: 11px; color: #3B6D11; }
+  .scard-sub { font-size: 11px; color: var(--color-text-secondary); }
+  .db-ok { background: #EAF3DE; border: 1px solid #C0DD97; border-radius: var(--border-radius-lg); padding: 0.75rem 1rem; margin-bottom: 1.5rem; }
+  .db-title { font-size: 13px; font-weight: 500; color: #3B6D11; margin-bottom: 0.5rem; }
+  .db-item { font-size: 13px; color: var(--color-text-primary); display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; }
+  .ok-icon { color: #639922; font-weight: 500; }
+</style>
+
+<div class="wrap">
+  <h2 style="font-size:16px; font-weight:500; color:var(--color-text-primary); margin:0 0 0.25rem;">VibePulse develop 分支 — 审核报告</h2>
+  <p style="font-size:12px; color:var(--color-text-secondary); margin:0 0 1rem;">对比基准：main 分支（上次审核）</p>
+
+  <div class="summary-bar">
+    <div class="scard"><div class="scard-label">预估总分</div><div class="scard-val">A5–B1</div><div class="scard-delta">↑ 上次 B1–B2</div></div>
+    <div class="scard"><div class="scard-label">零分风险</div><div class="scard-val" style="color:#639922;">0 项</div><div class="scard-sub">全部通过</div></div>
+    <div class="scard"><div class="scard-label">提升最大</div><div class="scard-val">实时编码</div><div class="scard-sub">main 循环彻底消灭</div></div>
+    <div class="scard"><div class="scard-label">仍需关注</div><div class="scard-val">文档/PR</div><div class="scard-sub">视频仍缺失</div></div>
+  </div>
+
+  <div class="db-ok">
+    <div class="db-title">Dealbreaker 检查 — 6/6 通过（与上次相同）</div>
+    <div class="db-item"><span class="ok-icon">✓</span> C++ 独占树莓派端，无脚本语言</div>
+    <div class="db-item"><span class="ok-icon">✓</span> main() 主循环改为 pause()，无阻塞轮询</div>
+    <div class="db-item"><span class="ok-icon">✓</span> crossfade 的 sleep 改为 cv.wait_for，可中断</div>
+    <div class="db-item"><span class="ok-icon">✓</span> 回调链完整：sensor → HRC → BpmCallback → AudioService</div>
+    <div class="db-item"><span class="ok-icon">✓</span> 项目有实质内容，非 PR 空壳</div>
+    <div class="db-item"><span class="ok-icon">✓</span> Git 历史需在 github 上确认（zip 内不可见）</div>
+  </div>
+
+  <div class="section">
+    <div class="sec-header">
+      <div style="display:flex;align-items:center;"><span class="sec-title">2. 代码结构（SOLID + 封装 + 内存）</span><span class="grade-up">↑ 提升</span></div>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="sec-weight">权重 25%</span><span class="grade-badge grade-a">预估 A5–B1</span></div>
+    </div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> CMakeLists 拆分为 vibepulse_core / vibepulse_hw 两个库，SRP 在构建层面也得到体现，模块边界清晰。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> HeartRateConfig 结构体将所有 DSP 参数集中管理，彻底消除了之前 13 个硬编码私有成员，可测试性和可配置性大幅提升。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> AppStateStore + ConsolePresenter + AudioService 三个类，职责划分更加清晰，main() 变成仅 3 行的入口，符合 SRP。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> IAudioBackend 新增 isFinished() 默认实现（返回 false），旧的 mock 无需改动即可兼容，符合 OCP。</div></div>
+    <div class="item"><div class="dot dot-good"></div><div class="item-text">ZoneMusicPlayer 改为 m_zoneHandles[] + m_handlePaths unordered_map，多曲目支持且内存结构更高效。</div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">m_rng（std::mt19937）被 monitorLoop 和 setZone 两个不同线程并发调用，未加锁保护。std::mt19937 不是线程安全的。<span class="item-tag tag-fix">需修</span></div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">dsp.cpp 重复 #include 问题仍未修复（第1、2行均为 #include "../include/dsp.h"）。<span class="item-tag tag-fix">一行删掉</span></div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">README 新增了 SOLID 原则说明段落，但措辞较笼统（"guided by SOLID principles"），未像评分标准要求的那样对应到具体类举例。建议补充一节对照表。<span class="item-tag tag-warn">建议完善</span></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-header">
+      <div style="display:flex;align-items:center;"><span class="sec-title">3. 实时编码（线程/回调/延迟）</span><span class="grade-up">↑ 显著提升</span></div>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="sec-weight">权重 30%</span><span class="grade-badge grade-a">预估 A4–A5</span></div>
+    </div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-ok">已修</span> main() 的 sleep_for(200ms) 轮询彻底消除。改为 pause()（阻塞等待信号），配合 SIGINT/SIGTERM 处理，主线程零 CPU 占用。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-ok">已修</span> ConsolePresenter 用 AppStateStore::waitForUpdate()+条件变量驱动打印，完全事件驱动，BPM 变化立刻响应，不再轮询。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-ok">已修</span> crossfade 的 sleep_for 改为 cv.wait_for，中断响应从 50ms 降至 &lt;1ms，这正是之前讨论的修复方案。</div></div>
+    <div class="item"><div class="dot dot-good"></div><div class="item-text">新增 AudioService 类，BPM callback → AudioService::updateBpm() → ZoneMusicPlayer::updateBPM()，回调链路清晰无冗余锁。</div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">monitorLoop 仍使用 sleep_for(200ms) 检测曲目是否播放完毕（轮询 isFinished）。这是一个合理的实现，但可在文档中注明：isFinished 属于状态轮询，因 SDL2_mixer 无曲目结束回调接口而采用此方式，200ms 对音乐切换场景可接受。否则老师可能认为这是对 sleep 的不当使用。<span class="item-tag tag-warn">建议文档说明</span></div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">README 中延迟量化分析仍不完整。评分标准要求"quantitative assessment of latencies"——例如：sensor DRDY 中断→回调链→音乐切换的端到端延迟实测值。建议在 CODE_ARCHITECTURE.md 中补充一节具体数字。<span class="item-tag tag-warn">补文档</span></div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-header">
+      <div style="display:flex;align-items:center;"><span class="sec-title">4. 版本控制 + 项目管理 + 测试</span><span class="grade-up">↑ 提升</span></div>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="sec-weight">权重 25%</span><span class="grade-badge grade-b">预估 B1–B2</span></div>
+    </div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-ok">已修</span> CMakeLists.txt 集成了 GTest，include(CTest) + gtest_discover_tests() + add_subdirectory(tests) 全部到位，评分标准要求的 cmake 测试体系已完整建立。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> tests/test_music_player.cpp 是一个不依赖 GTest 的轻量测试运行器，可在 CTest 框架外单独运行，覆盖场景与 src/test_MusicPlayer.cpp 互补。</div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">tests/CMakeLists.txt 中 test_music_player 未链接 GTest，使用自定义断言（expectTrue/expectEqInt）。这能工作，但老师可能注意到与主测试文件风格不统一。不是大问题，但建议在注释里解释原因。<span class="item-tag tag-warn">小瑕疵</span></div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">zip 包内依然看不到 git 历史。Git 版本控制评分完全取决于 github 上的实际记录——分支、commit 质量、issue tracker 使用——这仍是最大的不确定因素。</div></div>
+  </div>
+
+  <div class="section">
+    <div class="sec-header">
+      <div style="display:flex;align-items:center;"><span class="sec-title">5. 文档 + PR / 社交媒体</span><span class="grade-same">→ 略有改善</span></div>
+      <div style="display:flex;gap:6px;align-items:center;"><span class="sec-weight">权重 10%</span><span class="grade-badge grade-c">预估 C1–C2</span></div>
+    </div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> README 新增了实时架构说明、SOLID 原则、劳动分工、项目管理章节，内容明显比 main 分支丰富。</div></div>
+    <div class="item"><div class="dot dot-new"></div><div class="item-text"><span class="item-tag tag-new">新增</span> README 中明确列出了 5 名成员的分工角色（PM、DSP Lead、Hardware Lead 等），评分标准明确要求此项。</div></div>
+    <div class="item"><div class="dot dot-bad"></div><div class="item-text">演示视频仍然缺失。评分标准将"无视频"列为最低档（F级），这是文档/PR 维度失分最重的单项。<span class="item-tag tag-fix">高优先级</span></div></div>
+    <div class="item"><div class="dot dot-bad"></div><div class="item-text">硬件 BOM 仍不具体。README 的 Hardware 节只写了"Raspberry Pi"和"Heart-rate sensor (e.g., PPG)"，MAX30102 的接线图、GPIO 引脚分配、所需电阻等完全缺失。<span class="item-tag tag-fix">需补充</span></div></div>
+    <div class="item"><div class="dot dot-bad"></div><div class="item-text">Doxygen 注释仍缺失。新增的 AppStateStore、ConsolePresenter、AudioService、HeartRateConfig 等 public 接口均无 /** */ 文档注释。<span class="item-tag tag-fix">需补充</span></div></div>
+    <div class="item"><div class="dot dot-warn"></div><div class="item-text">README 的 git clone URL 仍是占位符（your-org/your-repo）未替换。<span class="item-tag tag-fix">务必改掉</span></div></div>
+  </div>
+</div>

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <algorithm>
 
+// Initialises handles to -1 (not loaded) and seeds debounce timestamps to now.
 ZoneMusicPlayer::ZoneMusicPlayer(std::shared_ptr<IAudioBackend> backend)
     : m_backend(std::move(backend))
 {
