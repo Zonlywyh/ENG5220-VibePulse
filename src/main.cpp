@@ -26,8 +26,7 @@
 
 namespace {
 
-// Global stop flag shared across threads. The signal handler only flips this
-// atomic flag so shutdown stays async-signal-safe.
+// Global stop flag
 std::atomic<bool> g_running{true};
 
 void signalHandler(int) {
@@ -64,12 +63,7 @@ struct AudioSnapshot {
     std::optional<std::string> transition_message;
 };
 
-// Unified application state shared by the heart-rate pipeline,
-// the optional audio system, and the console presenter.
-//
-// This snapshot is the hand-off point between asynchronous producers
-// (sensor callback, heart-rate callbacks, audio transitions) and the
-// background presenter thread that prints status to the console.
+// Shared app state
 struct AppSnapshot {
     bool has_samples = false;
     bool finger_detected = false;
@@ -77,11 +71,7 @@ struct AppSnapshot {
     AudioSnapshot audio;
 };
 
-// Thread-safe store that publishes state changes to waiting consumers.
-//
-// Producers update the snapshot from callback context, then notify the
-// condition variable. Consumers wait for version changes instead of polling,
-// which keeps the application event-driven rather than sleep-based.
+// Thread-safe state store for callback updates
 class AppStateStore {
 public:
     void markSamplesReceived() {
@@ -143,8 +133,7 @@ private:
             update_fn(snapshot_);
             ++version_;
         }
-        // Notify all waiters because multiple background components may be
-        // blocked on the latest state becoming available.
+        // Wake up anything waiting for new state
         cv_.notify_all();
     }
 
@@ -155,12 +144,8 @@ private:
     bool stop_requested_ = false;
 };
 
-// Background console logger that turns state snapshots into the
-// user-facing status lines printed in the terminal.
-//
-// Console I/O is intentionally moved off the sensor/algorithm callback path.
-// That keeps the fast path short and prevents printing from blocking signal
-// processing or heart-rate updates.
+// Prints status in a separate thread
+// State changes come from callbacks/events
 class ConsolePresenter {
 public:
     explicit ConsolePresenter(AppStateStore& state_store)
@@ -227,8 +212,7 @@ private:
         return status_message;
     }
 
-    // Timing diagnostics are only emitted on actual state edges,
-    // not on periodic refreshes of the same state.
+    // Print timing when the state changes
     void logStateTransitionTiming(MonitorState state, std::chrono::steady_clock::time_point now) {
         if (state == MonitorState::NoFinger &&
             last_state_ == MonitorState::Measuring &&
@@ -281,9 +265,7 @@ private:
         last_output_time_ = now;
     }
 
-    // Wait for a real state update, then publish the latest snapshot to the
-    // console. This keeps presentation event-driven as well: no periodic
-    // refresh loop, only producer-driven wakeups or an explicit stop signal.
+    // Wait for state updates and print them
     void run() {
         std::uint64_t seen_version = state_store_.version();
 
@@ -314,8 +296,7 @@ private:
 };
 
 #ifdef VIBEPULSE_ENABLE_AUDIO
-// Owns optional audio setup and feeds the resulting playback metadata
-// back into the shared application state.
+// Handles audio setup and event-driven music updates
 class AudioService {
 public:
     explicit AudioService(AppStateStore& state_store)
@@ -404,9 +385,7 @@ public:
                 }
                 std::cout << "[AUDIO] initial -> zone1 -> " << zone_tracks_[0].front() << std::endl;
 
-                // Audio crossfades are asynchronous inside ZoneMusicPlayer.
-                // When a transition completes, the callback republishes the
-                // current/target track names into the shared application state.
+                // Update UI state when a track change finishes
                 zone_player_->setTransitionCallback([this](int) {
                     publishAudioSnapshot();
                 });
@@ -438,9 +417,7 @@ public:
                 "zone" + std::to_string(previous_zone) + " -> zone" + std::to_string(next_zone) +
                 " (" + change + ")";
         }
-        // BPM updates arrive from the heart-rate callback path. AudioService
-        // forwards them to the player, which decides whether a zone switch
-        // should start based on its own debounce/crossfade rules.
+        // Send BPM to the player
         zone_player_->updateBPM(bpm);
         last_bpm_ = bpm;
         publishAudioSnapshot();
@@ -490,8 +467,8 @@ public:
 };
 #endif
 
-// Top-level coordinator that wires sensor input, heart-rate processing,
-// optional audio, and console presentation into one application.
+// Main app class
+// Wires sensor I/O, callbacks and audio together
 class MonitorApplication {
 public:
     MonitorApplication(int argc, char** argv)
@@ -519,10 +496,7 @@ public:
             sensor_.start();
             std::cout << "Heart rate monitor started. Press Ctrl+C to stop." << std::endl;
 
-            // The sensor itself is event-driven internally: its worker blocks on
-            // GPIO/I/O readiness and invokes callbacks when new FIFO samples are
-            // available. main() therefore does not poll for samples here; it
-            // simply waits for a shutdown signal.
+            // Sensor I/O runs in the background, main just waits for Ctrl+C
             while (g_running.load()) {
                 pause();
             }
@@ -540,20 +514,12 @@ public:
     }
 
 private:
-    // Connect sensor callbacks to the shared state store and to the
-    // downstream services that consume heart-rate updates.
-    //
-    // The flow is:
-    // 1. Sensor callback fires when the lower-level sensor worker has new data.
-    // 2. IR samples are passed into HeartRateCalculator.
-    // 3. HeartRateCalculator emits finger/BPM callbacks as state changes occur.
-    // 4. Those callbacks update the shared snapshot and optionally drive audio.
+    // Connect sensor callback, BPM callback and audio update callback
     void wireCallbacks() {
         sensor_.setDataCallback([this](const std::vector<Sample>& samples) {
             state_store_.markSamplesReceived();
 
-            // The sensor callback still keeps its work small: convert the batch
-            // to IR values and hand it straight to the heart-rate estimator.
+            // Sensor data comes in through callback from the I/O thread
             std::vector<float> ir_samples;
             ir_samples.reserve(samples.size());
             for (const Sample& sample : samples) {
@@ -562,14 +528,12 @@ private:
             heart_rate_.processIrSamples(ir_samples);
         });
 
-        // Finger detection changes are published as events into the shared
-        // state store. The presenter thread consumes them and updates output.
+        // Finger status is updated through callback events
         heart_rate_.setFingerStateCallback([this](bool finger_present) {
             state_store_.setFingerDetected(finger_present);
         });
 
-        // BPM callbacks also feed the audio service. This keeps the music logic
-        // driven by heart-rate events instead of a timer-based polling loop.
+        // BPM callback also drives the music player
         heart_rate_.setBpmCallback([this](double bpm_value) {
             const int rounded_bpm = static_cast<int>(bpm_value + 0.5);
             state_store_.setBpm(rounded_bpm);
