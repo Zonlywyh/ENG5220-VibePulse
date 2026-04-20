@@ -9,6 +9,7 @@
 
 #include <string>
 #include <vector>
+#include <array>
 #include <functional>
 #include <atomic>
 #include <thread>
@@ -18,6 +19,8 @@
 #include <random>
 #include <optional>
 #include <unordered_map>
+#include <deque>
+#include <chrono>
 
 constexpr int ZONE_COUNT = 6;
 
@@ -44,6 +47,9 @@ public:
     // Load tracks for a zone (1..6). Supports multiple tracks per zone.
     bool loadZone(int zone, const std::vector<std::string>& paths);
 
+    // Convenience: load one track per zone (zone1..zone6).
+    bool loadZoneTracks(const std::array<std::string, kZoneCount>& paths);
+
     // Feed BPM updates from the heart-rate pipeline.
     void updateBPM(int bpm);
 
@@ -51,7 +57,7 @@ public:
     void setZone(int zone);
 
     int  currentZone()   const { return m_currentZone.load(); }
-    int  targetZone()    const { return m_currentZone.load(); }  // same: no separate target in this model
+    int  targetZone()    const { return m_targetZone.load(); }
     bool isCrossfading() const { return m_crossfading.load(); }
     int  debugVolumeIn() const { return m_volIn.load();  }
     int  debugVolumeOut()const { return m_volOut.load(); }
@@ -63,10 +69,27 @@ public:
     void setTransitionCallback(std::function<void(int zone)> cb);
 
 private:
+    enum class EventType {
+        ZoneChange,
+        TrackFinished,
+        RotateTrack,
+        Shutdown
+    };
+
+    struct PendingEvent {
+        EventType type;
+        int value;
+    };
+
+    void enqueueEvent(EventType type, int value);
+    void eventLoop();
     int  pickRandomExcept(int zone, int excludeHandle);
+    void handleTrackFinished(int handle);
+    void performRotateWithinZone(int zone);
+    void performSetZone(int zone);
     void runCrossfade(int hOut, int hIn, int next);
-    void monitorLoop();
     void stopWorker();
+    void refreshTrackDeadline(int zone);
 
     std::shared_ptr<IAudioBackend>        m_backend;
 
@@ -75,14 +98,20 @@ private:
     int                                   m_currentHandle{ -1 };
 
     std::atomic<int>                      m_currentZone  { 1 };
+    std::atomic<int>                      m_targetZone   { 1 };
     std::atomic<bool>                     m_crossfading  { false };
     std::atomic<bool>                     m_stopRequested{ false };
     std::atomic<int>                      m_volIn        { 128 };
     std::atomic<int>                      m_volOut       {   0 };
 
     std::thread                           m_worker;
-    std::thread                           m_monitor;
-    std::atomic<bool>                     m_monitorStop  { false };
+    std::thread                           m_eventThread;
+    std::mutex                            m_eventMutex;
+    std::condition_variable               m_eventCv;
+    std::deque<PendingEvent>              m_pendingEvents;
+    bool                                  m_eventStop    { false };
+    std::chrono::steady_clock::time_point m_trackDeadline =
+        std::chrono::steady_clock::time_point::max();
 
     mutable std::mutex                    m_pathMutex;
     std::string                           m_currentTrackPath;

@@ -19,18 +19,16 @@ option(VIBEPULSE_ENABLE_AUDIO "Enable SDL2/SDL2_mixer audio playback" ON)
 
 # ── Core music player library (portable, unit-test friendly) ──
 add_library(vibepulse_core
-    src/MusicPlayer.cpp
     src/ZoneMusicPlayer.cpp
 )
 target_compile_features(vibepulse_core PUBLIC cxx_std_17)
 target_include_directories(vibepulse_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(vibepulse_core PUBLIC Threads::Threads)
 
-# ── Hardware / sensor pipeline (MAX30102 + DSP + BPM) ─────────
+# ── Hardware / sensor pipeline (MAX30102  + BPM) ─────────
 add_library(vibepulse_hw
     src/HeartRateCalculator.cpp
     src/Sensor.cpp
-    src/dsp.cpp
 )
 target_compile_features(vibepulse_hw PUBLIC cxx_std_17)
 target_include_directories(vibepulse_hw PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

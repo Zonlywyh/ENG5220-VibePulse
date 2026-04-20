@@ -26,8 +26,7 @@
 
 namespace {
 
-// Global stop flag shared across threads. The signal handler only flips this
-// atomic flag so shutdown stays async-signal-safe.
+// Global stop flag
 std::atomic<bool> g_running{true};
 
 void signalHandler(int) {
@@ -57,16 +56,14 @@ enum class MonitorState {
 
 struct AudioSnapshot {
     bool available = false;
+    std::optional<int> current_zone;
+    std::optional<int> target_zone;
     std::optional<std::string> current_track;
     std::optional<std::string> target_track;
+    std::optional<std::string> transition_message;
 };
 
-// Unified application state shared by the heart-rate pipeline,
-// the optional audio system, and the console presenter.
-//
-// This snapshot is the hand-off point between asynchronous producers
-// (sensor callback, heart-rate callbacks, audio transitions) and the
-// background presenter thread that prints status to the console.
+// Shared app state
 struct AppSnapshot {
     bool has_samples = false;
     bool finger_detected = false;
@@ -74,11 +71,7 @@ struct AppSnapshot {
     AudioSnapshot audio;
 };
 
-// Thread-safe store that publishes state changes to waiting consumers.
-//
-// Producers update the snapshot from callback context, then notify the
-// condition variable. Consumers wait for version changes instead of polling,
-// which keeps the application event-driven rather than sleep-based.
+// Thread-safe state store for callback updates
 class AppStateStore {
 public:
     void markSamplesReceived() {
@@ -109,12 +102,9 @@ public:
     }
 
     AppSnapshot waitForUpdate(std::uint64_t last_seen_version,
-                              std::chrono::steady_clock::time_point deadline,
                               bool& changed) {
         std::unique_lock<std::mutex> lock(mutex_);
-        // Wake up either when a producer publishes a newer snapshot or when a
-        // periodic refresh deadline is reached.
-        cv_.wait_until(lock, deadline, [&] {
+        cv_.wait(lock, [&] {
             return stop_requested_ || version_ != last_seen_version;
         });
 
@@ -143,8 +133,7 @@ private:
             update_fn(snapshot_);
             ++version_;
         }
-        // Notify all waiters because multiple background components may be
-        // blocked on the latest state becoming available.
+        // Wake up anything waiting for new state
         cv_.notify_all();
     }
 
@@ -155,12 +144,8 @@ private:
     bool stop_requested_ = false;
 };
 
-// Background console logger that turns state snapshots into the
-// user-facing status lines printed in the terminal.
-//
-// Console I/O is intentionally moved off the sensor/algorithm callback path.
-// That keeps the fast path short and prevents printing from blocking signal
-// processing or heart-rate updates.
+// Prints status in a separate thread
+// State changes come from callbacks/events
 class ConsolePresenter {
 public:
     explicit ConsolePresenter(AppStateStore& state_store)
@@ -220,12 +205,14 @@ private:
             snapshot.audio.target_track != snapshot.audio.current_track) {
             status_message += " -> " + *snapshot.audio.target_track;
         }
+        if (snapshot.audio.transition_message.has_value()) {
+            status_message += " | " + *snapshot.audio.transition_message;
+        }
 
         return status_message;
     }
 
-    // Timing diagnostics are only emitted on actual state edges,
-    // not on periodic refreshes of the same state.
+    // Print timing when the state changes
     void logStateTransitionTiming(MonitorState state, std::chrono::steady_clock::time_point now) {
         if (state == MonitorState::NoFinger &&
             last_state_ == MonitorState::Measuring &&
@@ -250,7 +237,7 @@ private:
         }
     }
 
-    void publish(const AppSnapshot& snapshot, bool periodic_refresh) {
+    void publish(const AppSnapshot& snapshot) {
         const auto now = std::chrono::steady_clock::now();
         const MonitorState state = determineState(snapshot);
         const std::string status_message = makeStatusMessage(snapshot);
@@ -258,7 +245,7 @@ private:
         const bool message_changed = status_message != last_status_;
         const bool bpm_changed = snapshot.bpm != last_bpm_;
 
-        if (!state_changed && !message_changed && !bpm_changed && !periodic_refresh) {
+        if (!state_changed && !message_changed && !bpm_changed) {
             return;
         }
 
@@ -276,35 +263,23 @@ private:
         last_bpm_ = snapshot.bpm;
         last_state_ = state;
         last_output_time_ = now;
-        last_publish_time_ = now;
     }
 
-    // Wait for either a real state update or a periodic refresh deadline,
-    // then publish the latest snapshot to the console.
-    //
-    // This worker thread is the consumer side of the event-driven pipeline:
-    // callbacks publish state, this thread wakes on the condition variable,
-    // and only then performs the slower console formatting and I/O.
+    // Wait for state updates and print them
     void run() {
         std::uint64_t seen_version = state_store_.version();
 
         while (!stop_requested_.load()) {
-            const auto refresh_interval =
-                (last_state_.has_value() && *last_state_ == MonitorState::HeartRateReady)
-                    ? std::chrono::milliseconds(800)
-                    : std::chrono::seconds(3);
-            const auto deadline = last_publish_time_ + refresh_interval;
-
             bool changed = false;
-            const AppSnapshot snapshot = state_store_.waitForUpdate(seen_version, deadline, changed);
+            const AppSnapshot snapshot = state_store_.waitForUpdate(seen_version, changed);
             if (stop_requested_.load()) {
                 break;
             }
 
-            const auto now = std::chrono::steady_clock::now();
-            const bool periodic_refresh = now >= deadline;
             seen_version = state_store_.version();
-            publish(snapshot, periodic_refresh && !changed);
+            if (changed) {
+                publish(snapshot);
+            }
         }
     }
 
@@ -314,8 +289,6 @@ private:
     std::optional<MonitorState> last_state_;
     std::string last_status_;
     std::optional<int> last_bpm_;
-    std::chrono::steady_clock::time_point last_publish_time_ =
-        std::chrono::steady_clock::now() - std::chrono::seconds(10);
     std::chrono::steady_clock::time_point last_output_time_ = std::chrono::steady_clock::now();
     std::optional<std::chrono::steady_clock::time_point> last_no_finger_time_;
     std::optional<std::chrono::steady_clock::time_point> last_measuring_time_;
@@ -323,8 +296,7 @@ private:
 };
 
 #ifdef VIBEPULSE_ENABLE_AUDIO
-// Owns optional audio setup and feeds the resulting playback metadata
-// back into the shared application state.
+// Handles audio setup and event-driven music updates
 class AudioService {
 public:
     explicit AudioService(AppStateStore& state_store)
@@ -341,14 +313,14 @@ public:
             }
         }
 
-        auto pick_zone_wav = [&](int zone) -> std::optional<std::string> {
+        auto list_zone_wavs = [&](int zone) -> std::vector<std::string> {
             namespace fs = std::filesystem;
             const fs::path dir = fs::path(music_root) / ("zone" + std::to_string(zone));
             std::vector<fs::path> wavs;
             std::error_code ec;
 
             if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
-                return std::nullopt;
+                return {};
             }
 
             for (const auto& entry : fs::directory_iterator(dir, ec)) {
@@ -364,12 +336,13 @@ public:
                 }
             }
 
-            if (wavs.empty()) {
-                return std::nullopt;
-            }
-
             std::sort(wavs.begin(), wavs.end());
-            return wavs.front().string();
+            std::vector<std::string> result;
+            result.reserve(wavs.size());
+            for (const auto& wav : wavs) {
+                result.push_back(wav.string());
+            }
+            return result;
         };
 
         try {
@@ -378,33 +351,41 @@ public:
             std::cout << "[AUDIO] creating zone player" << std::endl;
             zone_player_ = std::make_unique<ZoneMusicPlayer>(backend);
 
-            std::array<std::string, ZoneMusicPlayer::kZoneCount> paths{};
             bool ok = true;
             for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                auto path = pick_zone_wav(z);
-                if (!path.has_value()) {
+                const auto paths = list_zone_wavs(z);
+                if (paths.empty()) {
                     std::cerr << "[AUDIO] Missing .wav in: "
                               << (music_root + "/zone" + std::to_string(z)) << std::endl;
                     ok = false;
                     break;
                 }
-                paths[z - 1] = *path;
+                zone_tracks_[z - 1] = paths;
             }
 
             std::cout << "[AUDIO] loading zone tracks" << std::endl;
-            if (ok && !zone_player_->loadZoneTracks(paths)) {
+            if (ok) {
+                for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
+                    if (!zone_player_->loadZone(z, zone_tracks_[z - 1])) {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!ok) {
                 std::cerr << "[AUDIO] Failed to load zone tracks. Check WAV format/paths." << std::endl;
                 zone_player_.reset();
             } else if (zone_player_) {
                 std::cout << "[AUDIO] Zone player ready. Root=" << music_root << std::endl;
                 for (int z = 1; z <= ZoneMusicPlayer::kZoneCount; ++z) {
-                    std::cout << "[AUDIO] zone" << z << " -> " << paths[z - 1] << std::endl;
+                    for (const auto& path : zone_tracks_[z - 1]) {
+                        std::cout << "[AUDIO] zone" << z << " -> " << path << std::endl;
+                    }
                 }
-                std::cout << "[AUDIO] initial -> zone1 -> " << paths[0] << std::endl;
+                std::cout << "[AUDIO] initial -> zone1 -> " << zone_tracks_[0].front() << std::endl;
 
-                // Audio crossfades are asynchronous inside ZoneMusicPlayer.
-                // When a transition completes, the callback republishes the
-                // current/target track names into the shared application state.
+                // Update UI state when a track change finishes
                 zone_player_->setTransitionCallback([this](int) {
                     publishAudioSnapshot();
                 });
@@ -421,10 +402,24 @@ public:
         if (!zone_player_) {
             return;
         }
-        // BPM updates arrive from the heart-rate callback path. AudioService
-        // forwards them to the player, which decides whether a zone switch
-        // should start based on its own debounce/crossfade rules.
+        const int previous_zone = zone_player_->currentZone();
+        const int next_zone = bpmToZone(bpm);
+        if (next_zone != previous_zone) {
+            std::string change = "heart rate changed";
+            if (last_bpm_.has_value()) {
+                if (bpm > *last_bpm_) {
+                    change = "heart rate faster";
+                } else if (bpm < *last_bpm_) {
+                    change = "heart rate slower";
+                }
+            }
+            pending_transition_message_ =
+                "zone" + std::to_string(previous_zone) + " -> zone" + std::to_string(next_zone) +
+                " (" + change + ")";
+        }
+        // Send BPM to the player
         zone_player_->updateBPM(bpm);
+        last_bpm_ = bpm;
         publishAudioSnapshot();
     }
 
@@ -434,11 +429,15 @@ private:
         snapshot.available = zone_player_ != nullptr;
 
         if (zone_player_) {
+            snapshot.current_zone = zone_player_->currentZone();
+            snapshot.target_zone = zone_player_->targetZone();
             snapshot.current_track = trackStem(zone_player_->currentTrackPath());
             snapshot.target_track = trackStem(zone_player_->targetTrackPath());
+            snapshot.transition_message = pending_transition_message_;
         }
 
         state_store_.setAudioSnapshot(snapshot);
+        pending_transition_message_.reset();
     }
 
     static std::optional<std::string> trackStem(const std::optional<std::string>& path) {
@@ -455,6 +454,9 @@ private:
 
     AppStateStore& state_store_;
     std::unique_ptr<ZoneMusicPlayer> zone_player_;
+    std::array<std::vector<std::string>, ZoneMusicPlayer::kZoneCount> zone_tracks_{};
+    std::optional<int> last_bpm_;
+    std::optional<std::string> pending_transition_message_;
 };
 #else
 class AudioService {
@@ -465,8 +467,8 @@ public:
 };
 #endif
 
-// Top-level coordinator that wires sensor input, heart-rate processing,
-// optional audio, and console presentation into one application.
+// Main app class
+// Wires sensor I/O, callbacks and audio together
 class MonitorApplication {
 public:
     MonitorApplication(int argc, char** argv)
@@ -494,10 +496,7 @@ public:
             sensor_.start();
             std::cout << "Heart rate monitor started. Press Ctrl+C to stop." << std::endl;
 
-            // The sensor itself is event-driven internally: its worker blocks on
-            // GPIO/I/O readiness and invokes callbacks when new FIFO samples are
-            // available. main() therefore does not poll for samples here; it
-            // simply waits for a shutdown signal.
+            // Sensor I/O runs in the background, main just waits for Ctrl+C
             while (g_running.load()) {
                 pause();
             }
@@ -515,20 +514,12 @@ public:
     }
 
 private:
-    // Connect sensor callbacks to the shared state store and to the
-    // downstream services that consume heart-rate updates.
-    //
-    // The flow is:
-    // 1. Sensor callback fires when the lower-level sensor worker has new data.
-    // 2. IR samples are passed into HeartRateCalculator.
-    // 3. HeartRateCalculator emits finger/BPM callbacks as state changes occur.
-    // 4. Those callbacks update the shared snapshot and optionally drive audio.
+    // Connect sensor callback, BPM callback and audio update callback
     void wireCallbacks() {
         sensor_.setDataCallback([this](const std::vector<Sample>& samples) {
             state_store_.markSamplesReceived();
 
-            // The sensor callback still keeps its work small: convert the batch
-            // to IR values and hand it straight to the heart-rate estimator.
+            // Sensor data comes in through callback from the I/O thread
             std::vector<float> ir_samples;
             ir_samples.reserve(samples.size());
             for (const Sample& sample : samples) {
@@ -537,14 +528,12 @@ private:
             heart_rate_.processIrSamples(ir_samples);
         });
 
-        // Finger detection changes are published as events into the shared
-        // state store. The presenter thread consumes them and updates output.
+        // Finger status is updated through callback events
         heart_rate_.setFingerStateCallback([this](bool finger_present) {
             state_store_.setFingerDetected(finger_present);
         });
 
-        // BPM callbacks also feed the audio service. This keeps the music logic
-        // driven by heart-rate events instead of a timer-based polling loop.
+        // BPM callback also drives the music player
         heart_rate_.setBpmCallback([this](double bpm_value) {
             const int rounded_bpm = static_cast<int>(bpm_value + 0.5);
             state_store_.setBpm(rounded_bpm);

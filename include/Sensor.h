@@ -1,7 +1,8 @@
 /**
  * @file Sensor.h
  * @brief MAX30102 PPG sensor driver using libgpiod for event-driven DRDY handling.
- *
+ * Provides realtime acquisition of PPG samples via blocking I/O (epoll on GPIO)
+ * and callback mechanism. 
  * @note Adapted from:
  *       - libgpiod official examples
  *       - MAX30102 datasheet
@@ -22,11 +23,13 @@
 #include <thread>
 #include <vector>
 
+/* Default configuration */
 constexpr int DEFAULT_I2C_BUS = 1;
 constexpr uint8_t DEFAULT_MAX30102_ADDRESS = 0x57;
 constexpr int DEFAULT_DRDY_GPIO = 27;
 constexpr int DEFAULT_DRDY_CHIP = 0;
 
+/* Register addresses */
 constexpr uint8_t REG_INTR_STATUS_1 = 0x00;
 constexpr uint8_t REG_INTR_STATUS_2 = 0x01;
 constexpr uint8_t REG_INTR_ENABLE_1 = 0x02;
@@ -45,11 +48,13 @@ constexpr uint8_t REG_PART_ID       = 0xFF;
 
 constexpr int FIFO_DEPTH = 32;
 
+/** @brief Single PPG sample from Red and IR channels */
 struct Sample {
     float red = 0.0f;
     float ir = 0.0f;
 };
 
+/** @brief Sensor sampling averaging options */
 enum SampleAverage {
     SAMPLEAVG_1  = 0,
     SAMPLEAVG_2  = 1,
@@ -59,6 +64,7 @@ enum SampleAverage {
     SAMPLEAVG_32 = 5
 };
 
+/** @brief Sensor sampling rate options */
 enum SampleRate {
     SAMPLERATE_50   = 0,
     SAMPLERATE_100  = 1,
@@ -70,6 +76,7 @@ enum SampleRate {
     SAMPLERATE_3200 = 7
 };
 
+/** @brief LED pulse width options */
 enum LedPulseWidth {
     PULSEWIDTH_69  = 0,
     PULSEWIDTH_118 = 1,
@@ -77,6 +84,7 @@ enum LedPulseWidth {
     PULSEWIDTH_411 = 3
 };
 
+/** @brief Sensor operational status */
 enum class SensorStatus {
     UNINITIALIZED,
     READY,
@@ -84,8 +92,16 @@ enum class SensorStatus {
     ERROR
 };
 
+/**
+ * @class Max30102Sensor
+ * @brief Main driver for MAX30102 PPG sensor.
+ *
+ * Single responsibility: acquire raw samples via I2C and GPIO DRDY
+ * using blocking I/O and notify via callback. All data is private.
+ */
 class Max30102Sensor {
 public:
+/** @brief Callback type for new PPG samples */
     using DataCallback = std::function<void(const std::vector<Sample>& samples)>;
 
     Max30102Sensor(int interruptPin = DEFAULT_DRDY_GPIO,
