@@ -230,34 +230,12 @@ It is currently not integrated into the main pipeline.
 
 This project uses CMake for builds and tests.
 
-### 1) Sensor + BPM console app (`src/main.cpp`)
-
-On Raspberry Pi you typically need libgpiod and pthread:
-
-```bash
-g++ -std=c++17 -Iinclude \
-  src/main.cpp src/Sensor.cpp src/HeartRateCalculator.cpp \
-  -lgpiod -pthread -o vibepulse_hr
-sudo ./vibepulse_hr
-```
-
-### 2) Audio player bring-up (`src/demo_music_player.cpp`)
-
+## build
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
 
-### 3) MusicPlayer unit tests (`src/test_MusicPlayer.cpp`)
-
-Requires GoogleTest on the system:
-
-```bash
-g++ -std=c++17 -Iinclude -pthread \
-  src/MusicPlayer.cpp src/test_MusicPlayer.cpp \
-  -lgtest -lgtest_main -o test_music_player
-./test_music_player
-```
 
 ## Known integration notes (important when building on Linux)
 
