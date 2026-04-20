@@ -356,9 +356,9 @@ void Max30102Sensor::dataWorker()
 
         if (ready == 0)
         {
-            // Keep the event-driven design as the primary path, but fall back
-            // to a lightweight FIFO drain so a misconfigured DRDY line does
-            // not stall the whole application.
+            // Keep the GPIO interrupt as the primary trigger, but fall back
+            // to a lightweight FIFO drain so missing or unstable DRDY events
+            // do not stall the whole pipeline.
             readFifo();
             continue;
         }

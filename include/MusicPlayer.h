@@ -10,6 +10,8 @@
 #include <atomic>
 #include <thread>
 #include <memory>
+#include <condition_variable>
+#include <mutex>
 
 // ── Abstraction layer so unit-tests can stub the SDL2 backend ──
 struct IAudioBackend {
@@ -29,6 +31,8 @@ struct IAudioBackend {
     virtual bool isReady() const                      = 0;
     // Returns true when the track's channel has finished playing
     virtual bool isFinished(int id) const             { return false; }
+    // Optional callback fired by the backend when a track finishes.
+    virtual void setTrackFinishedCallback(std::function<void(int)> cb) {}
 };
 
 // ── Heart-rate driven music mode ──────────────────────────────
@@ -85,5 +89,7 @@ private:
     std::atomic<int>                    m_volActive    { 0   };
 
     std::thread                         m_worker;
+    std::mutex                          m_waitMutex;
+    std::condition_variable             m_waitCv;
     std::function<void(MusicMode)>      m_onTransition;
 };
