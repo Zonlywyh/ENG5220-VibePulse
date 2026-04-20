@@ -90,11 +90,18 @@ Based on our verified hardware design, connect the components as follows:
 
 * **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
 * **Labor Division**:
-  * **Member 1 **: Revision control strategy, Release management, and Issue tracking.
-  * **Yanyan Yang  (StudentID:3155877Y) **: Signal filtering algorithms and peak detection logic.
-  * **Mengfei Nan （StudentID:3154547N）**: Sensor integration, I2C protocol optimization, and wiring.
-  * **Member 4 **: Callback implementation, thread management, and latency assessment.
-  * **Member 5 **: Social media strategy, GitHub presentation, and promotional content.
+
+| Member  | Key Responsibilities & Contributions |
+| :--- | :--- |
+| **Yanyan Yang** (3155877Y) | Developed core **Digital Signal Processing (DSP)** modules, including **noise filtering algorithms** (e.g., Moving Average/Butterworth) and high-precision **peak detection logic** to ensure signal integrity. |
+| **Mengfei Nan** (3154547N) | Focused on **sensor integration**, fine-tuning **I2C protocol communication** for lower error rates, and managing physical wiring/circuit reliability. |
+| **[Name]** ([ID]) | 11111111111111111 |
+| **[Name]** ([ID])  | 1111111111 |
+| **[Name]** ([ID]) | 1111111111 |
+
+---
+
+
 
 
 ## 📢 Social Media & Promotion
@@ -126,7 +133,7 @@ Based on our verified hardware design, connect the components as follows:
    mkdir build && cd build
    cmake ..
    make -j4 # Production build with unit tests
-## References & Acknowledgements
+## 🚀 References & Acknowledgements
 
 ### External Libraries and Sources
 
