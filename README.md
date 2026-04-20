@@ -89,7 +89,7 @@ Based on our verified hardware design, connect the components as follows:
 * **Revision Control**: We use a formal **Branching & Release strategy**. Commit messages are linked to specific Issues to track development history.
 * **Labor Division**:
   * **Member 1 (PM)**: Revision control strategy, Release management, and Issue tracking.
-  * **Lei Yi (2980190Y) (DSP Lead)**: Signal filtering algorithms and peak detection logic.
+  * **Lei Yi (2980190Y) (DSP Lead)**: Signal filtering algorithms and heart‑rate detection logic.
   * **Mengfei Nan （StudentID:3154547N） (Hardware Lead)**: Sensor integration, I2C protocol optimization, and wiring.
   * **Member 4 (Real-time Lead)**: Callback implementation, thread management, and latency assessment.
   * **Member 5 (PR & Docs)**: Social media strategy, GitHub presentation, and promotional content.
