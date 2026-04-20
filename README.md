@@ -126,11 +126,10 @@ Based on our verified hardware design, connect the components as follows:
    ```bash
    git clone [https://github.com/Zonlywyh/ENG5220-VibePulse.git](https://github.com/Zonlywyh/ENG5220-VibePulse.git)
    cd ENG5220-VibePulse
-   mkdir build && cd build
 2. Build (CMake)
     ```bash
    mkdir build && cd build
-   cmake ..
+   cmake -S . -B build
    make -j4 # Production build with unit tests
 ## 🚀 References & Acknowledgements
 
