@@ -7,10 +7,10 @@
 class HeartRateDSP
 {
 public:
-    HeartRateDSP(); // 注意：这里只有分号，没有 { ... }
+    HeartRateDSP();
 
     uint32_t unpackRawData(uint8_t b1, uint8_t b2, uint8_t b3);
-    float processSample(uint32_t raw_val); // 确保这里是 uint32_t
+    float processSample(uint32_t raw_val);
     void detectHeartRate(float filtered_val, uint32_t timestamp_ms);
     float getCurrentBPM();
     void reset();
